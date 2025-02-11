@@ -6,6 +6,10 @@
 spring:
   application:
     name: atendi
+# Configuración de MongoDB    
+  data:
+    mongodb:
+      uri:   mongodb://admin:admin123@localhost:27017/atendi?authSource=admin
 # Configuración del puerto del servidor (opcional; por defecto 8080)
 server:
   port: 8080
@@ -23,11 +27,11 @@ logging:
         data:
           mongodb:
             core: DEBUG
-# Configuración de MongoDB
-atendi:
-  uri: mongodb://IMSS:IMSS2025@localhost:27017/atendi?authSource=atendi
-  database: atendi
-  host: localhost
-  port: 27017
-  username: admin
-  password: admin123
+# Configuración de MongoDB seteando conexion spring
+#atendi:
+ # uri: mongodb://IMSS:IMSS2025@localhost:27017/atendi?authSource=atendi
+  #database: atendi
+  #host: localhost
+  #port: 27017
+  #username: admin
+  #password: admin123
