@@ -1,0 +1,33 @@
+# Conversion to YAML from Properties formar report
+# Errors:
+# - Direct assignment 'logging.level.org.springframework.data.mongodb=DEBUG' can not be combined with sub-property assignment 'logging.level.org.springframework.data.mongodb.core...'. Direct assignment is dropped!
+# Warnings:
+# - The yaml file had comments which are lost in the refactoring!
+spring:
+  application:
+    name: atendi
+# Configuración del puerto del servidor (opcional; por defecto 8080)
+server:
+  port: 8080
+# Configuración de OpenAPI / Swagger
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+# Configura el nivel de log para el paquete de MongoDB
+logging:
+  level:
+    org:
+      springframework:
+        data:
+          mongodb:
+            core: DEBUG
+# Configuración de MongoDB
+atendi:
+  uri: mongodb://IMSS:IMSS2025@localhost:27017/atendi?authSource=atendi
+  database: atendi
+  host: localhost
+  port: 27017
+  username: admin
+  password: admin123
