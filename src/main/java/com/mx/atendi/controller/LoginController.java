@@ -22,6 +22,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@CrossOrigin(origins = "*") // Configura CORS según tus necesidades de producción
 public class LoginController {
 
     private final JwtUtil jwtUtil;
