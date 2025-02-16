@@ -44,6 +44,7 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/hospitales/**").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/usuarios/**").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/usuarios/**").permitAll()
                         .anyExchange().authenticated()
                 )
                 .authenticationManager(authenticationManager)
