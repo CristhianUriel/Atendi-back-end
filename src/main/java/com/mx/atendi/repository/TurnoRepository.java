@@ -21,15 +21,6 @@ public interface TurnoRepository extends ReactiveMongoRepository<Turno, String>{
      */
 	Flux<Turno> findByHospitalId(String hospitalId);
     /**
-     * Obtiene turnos de un hospital filtrados por un conjunto de tipos de operación y estado.
-     *
-     * @param hospitalId     ID del hospital.
-     * @param tiposOperacion Iterable de tipos de operación.
-     * @param estado         Estado del turno.
-     * @return Flux con los turnos filtrados.
-     */
-    Flux<Turno> findByHospitalIdAndTipoOperacionInAndEstado(String hospitalId, Iterable<String> tiposOperacion, String estado);
-    /**
      * Obtiene un turno por su ID y hospital.
      *
      * @param id         ID del turno.
@@ -37,4 +28,7 @@ public interface TurnoRepository extends ReactiveMongoRepository<Turno, String>{
      * @return Mono con el turno encontrado.
      */
     Mono<Turno> findByIdAndHospitalId(String id, String hospitalId);
+    
+    Flux<Turno> findByHospitalIdAndDepartamentoIdAndEstado(String hospitalId, String departamentoId, String estado);
+    
 }

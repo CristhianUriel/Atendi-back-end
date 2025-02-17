@@ -22,47 +22,44 @@ public class SecurityConfig {
     public JwtUtil jwtUtil() {
         return new JwtUtil();
     }
-
+    
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http, JwtUtil jwtUtil) {
         JwtAuthenticationManager authenticationManager = new JwtAuthenticationManager(jwtUtil);
         JwtSecurityContextRepository securityContextRepository = new JwtSecurityContextRepository(authenticationManager);
 
         return http
-                .cors(cors -> cors.configurationSource(request -> {
-                    CorsConfiguration config = new CorsConfiguration();
-                    config.setAllowedOrigins(List.of("*")); // 🔥 Permite solicitudes desde cualquier origen
-                    config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-                    config.setAllowedHeaders(List.of("*"));
-                    config.setExposedHeaders(List.of("Authorization", "Content-Type"));
-                    return config;
-                }))
-                .csrf(csrf -> csrf.disable())
+                .csrf(csrf -> csrf.disable()) // ❌ CSRF no es necesario en APIs REST
                 .authorizeExchange(exchange -> exchange
-                        .pathMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                        .pathMatchers(HttpMethod.GET, "/actuator/**").permitAll()
-                        .pathMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
-                        .pathMatchers(HttpMethod.POST, "/api/hospitales/**").permitAll()
-                        .pathMatchers(HttpMethod.POST, "/api/usuarios/**").permitAll()
-                        .pathMatchers(HttpMethod.GET, "/api/usuarios/**").permitAll()
-                        .anyExchange().authenticated()
+                        .pathMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()  // ✅ Swagger público
+                        .pathMatchers(HttpMethod.POST, "/api/auth/login").permitAll()  // ✅ Login público
+                        .pathMatchers(HttpMethod.GET, "/actuator/**").permitAll() //.hasRole("ADMIN")   🔒 Solo ADMIN puede ver Actuator
+                        .pathMatchers(HttpMethod.POST, "/api/hospitales/**").permitAll() //.hasAnyRole("ADMIN", "SUPERUSER")  // 🔒 Restringido
+                        .pathMatchers(HttpMethod.POST, "/api/usuarios/**").permitAll()//.hasRole("ADMIN") // 🔒 Solo ADMIN puede crear usuarios
+                        .pathMatchers(HttpMethod.GET, "/api/usuarios/**").permitAll()//.hasRole("ADMIN") // 🔒 Solo ADMIN puede crear usuarios
+                        .pathMatchers("/api/turnos/stream/**").authenticated() 
+                        .anyExchange().authenticated() // 🔒 Todo lo demás requiere autenticación
                 )
                 .authenticationManager(authenticationManager)
                 .securityContextRepository(securityContextRepository)
                 .build();
     }
+    
+	// 🔥 Filtro de CORS global con restricciones más seguras
+	@Bean
+	public CorsWebFilter corsWebFilter() {
+		CorsConfiguration corsConfig = new CorsConfiguration();
 
-    // 🔥 Agrega un filtro de CORS global si es necesario
-    @Bean
-    public CorsWebFilter corsWebFilter() {
-        CorsConfiguration corsConfig = new CorsConfiguration();
-        corsConfig.setAllowedOrigins(List.of("*")); 
-        corsConfig.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        corsConfig.setAllowedHeaders(List.of("*"));
-        corsConfig.setExposedHeaders(List.of("Authorization", "Content-Type"));
+		// 🔒 Restringe los dominios permitidos en producción
+		corsConfig.setAllowedOrigins(List.of("*")); // (List.of("https://miapp.com", "https://admin.miapp.com"));
+		corsConfig.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+		// corsConfig.setAllowedHeaders(List.of("*"));
+		corsConfig.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+		corsConfig.setExposedHeaders(List.of("Authorization"));
+		// corsConfig.setExposedHeaders(List.of("Authorization", "Content-Type"));
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", corsConfig);
-        return new CorsWebFilter(source);
-    }
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", corsConfig);
+		return new CorsWebFilter(source);
+	}
 }

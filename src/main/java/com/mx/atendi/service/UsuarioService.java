@@ -1,8 +1,11 @@
 package com.mx.atendi.service;
 
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 
 import com.mx.atendi.entity.Usuario;
+import com.mx.atendi.repository.DepartamentoRepository;
 import com.mx.atendi.repository.UsuarioRepository;
 
 import lombok.extern.slf4j.Slf4j;
@@ -19,9 +22,12 @@ import reactor.core.publisher.Mono;
 public class UsuarioService implements IUsuarioService {
 
     private final UsuarioRepository usuarioRepository;
-
-    public UsuarioService(UsuarioRepository usuarioRepository) {
+    private final DepartamentoRepository departamentoRepository;
+    
+    
+    public UsuarioService(UsuarioRepository usuarioRepository, DepartamentoRepository departamentoRepository) {
         this.usuarioRepository = usuarioRepository;
+        this.departamentoRepository = departamentoRepository;
     }
 
     /**
@@ -32,7 +38,10 @@ public class UsuarioService implements IUsuarioService {
      * @return Mono que emite el usuario creado.
      */
     @Override
-    public Mono<Usuario> crearUsuario(Usuario usuario) {
+    public Mono<Usuario> crearUsuario(Usuario usuario, String rolAdmin) {
+    	if (!"ADMINISTRADOR".equalsIgnoreCase(rolAdmin)) {
+            return Mono.error(new RuntimeException("Solo un administrador puede crear usuarios"));
+        }
         return usuarioRepository.save(usuario)
                 .doOnNext(savedUser -> log.info("Usuario creado: {}", savedUser));
     }
@@ -62,5 +71,54 @@ public class UsuarioService implements IUsuarioService {
 	public Mono<Usuario> findByUserNameAndHospitalId(String userName, String hospitalId) {
 		 return usuarioRepository.findByUserNameAndHospitalId(userName, hospitalId);
 	}
+	
+	/**
+     * Asigna un departamento y una ventanilla a un usuario. Solo un administrador puede hacer esto.
+     *
+     * @param userId ID del usuario.
+     * @param departamentoId ID del departamento.
+     * @param numeroVentanilla Número de ventanilla dentro del departamento.
+     * @param rolAdmin Rol del usuario que realiza la operación.
+     * @return Mono con el usuario actualizado.
+     */
+	@Override
+    public Mono<Usuario> asignarDepartamentoYVentanilla(String userId, String departamentoId, String ventanillaId, String rolAdmin) {
+        if (!"ADMINISTRADOR".equals(rolAdmin)) {
+            return Mono.error(new RuntimeException("Solo un administrador puede asignar departamentos y ventanillas"));
+        }
+
+        return departamentoRepository.findById(departamentoId)
+                .flatMap(departamento -> {
+                    if (!departamento.getVentanillasIds().contains(ventanillaId)) {
+                        return Mono.error(new RuntimeException("La ventanilla seleccionada no pertenece a este departamento"));
+                    }
+
+                    return usuarioRepository.findById(userId)
+                            .flatMap(usuario -> {
+                                usuario.setDepartamentoId(departamentoId);
+                                usuario.setVentanillaId(ventanillaId);
+                                return usuarioRepository.save(usuario);
+                            });
+                })
+                .doOnSuccess(u -> log.info("Departamento y ventanilla asignados a usuario: {}", u));
+    }
+	
+	/**
+	 * Elimina un usuario por su ID. Solo los administradores pueden ejecutar esta acción.
+	 *
+	 * @param userId ID del usuario a eliminar.
+	 * @param rolAdmin Rol del usuario autenticado que solicita la eliminación.
+	 * @return Mono<Void> indicando éxito o error si el usuario no tiene permisos.
+	 */
+	@Override
+	public Mono<Void> eliminarUsuarioPorId(String userId, String rolAdmin) {
+	    if (!"ADMINISTRADOR".equals(rolAdmin)) {
+	        return Mono.error(new RuntimeException("Solo un administrador puede eliminar usuarios"));
+	    }
+	    return usuarioRepository.findById(userId)
+	            .flatMap(usuario -> usuarioRepository.delete(usuario))
+	            .doOnSuccess(v -> log.info("Usuario eliminado: {}", userId));
+	}
+
 }
 

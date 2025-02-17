@@ -24,7 +24,8 @@ public class Usuario {
     private String userName;   // Nombre de usuario para autenticación.
     private String password;   // Contraseña para autenticación.
     private String rol; // Ej: "administrador", "recepcion", "ventanilla", "monitor"
-    private List<String> tiposOperacionAsignados; // Ej: ["registro", "pago"]
-    private List<String> ventanillasAsignadas; // Ej: ["Ventanilla 1", "Ventanilla 2"]
+    private String departamentoId; // ID del departamento asignado
+    private String ventanillaId; // ID de la ventanilla
+    private Integer numeroVentanilla; // Nuevo campo
 }
 

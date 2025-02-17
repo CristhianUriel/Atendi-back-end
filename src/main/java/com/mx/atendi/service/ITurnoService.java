@@ -18,28 +18,42 @@ public interface ITurnoService {
      * @param turno El turno a crear.
      * @return Mono que emite el turno creado.
      */
-	Mono<Turno> crearTurno(Turno turno);
-	 /**
-     * Actualiza el estado de un turno.
-     *
-     * @param id     ID del turno.
-     * @param estado Nuevo estado.
-     * @return Mono que emite el turno actualizado.
-     */
-	Mono<Turno> actualizarEstado(String id, String estado);
+	Mono<Turno> crearTurno(Turno turno, String rolUsuario);
     /**
      * Devuelve un flujo de turnos en tiempo real para un hospital.
      *
      * @param hospitalId ID del hospital.
      * @return Flux que emite los turnos del hospital.
      */
-	Flux<Turno> streamTurnos(String hospitalId);
-    /**
-     * Devuelve un flujo de turnos pendientes filtrados por tipos de operación (para ventanillas).
-     *
-     * @param hospitalId            ID del hospital.
-     * @param tiposOperacionAllowed Iterable de tipos de operación permitidos.
-     * @return Flux que emite los turnos filtrados.
-     */
-	Flux<Turno> streamTurnosPorOperacion(String hospitalId, Iterable<String> tiposOperacionAllowed);
+	 Flux<Turno> streamTurnos(String hospitalId, String departamentoId, boolean esMonitor);
+	/**
+	 * Devuelve los últimos turnos atendidos para mostrarlos en la pantalla.
+	 *
+	 * @param hospitalId ID del hospital
+	 * @param cantidad Número de turnos a devolver
+	 * @return Flux con los últimos turnos atendidos
+	 */
+	Flux<Turno> obtenerTurnosUltimosAtendidos(String hospitalId, int cantidad);
+
+	/**
+	 * Finaliza un turno, marcándolo como atendido o no atendido.
+	 *
+	 * @param turnoId ID del turno.
+	 * @param usuarioId ID del usuario que atendió el turno.
+	 * @param estadoFinal Estado final del turno ("atendido" o "no atendido").
+	 * @return Mono<Turno> con el turno finalizado.
+	 */
+	Mono<Turno> finalizarTurno(String turnoId, String usuarioId, String estadoFinal);
+	/**
+	 * Permite que un usuario tome un turno dentro de su departamento.
+	 * - Solo los usuarios del mismo departamento pueden tomar el turno.
+	 * - Un turno solo puede ser tomado si está en estado "pendiente".
+	 * - Si otro usuario ya tomó el turno, se devuelve un error.
+	 *
+	 * @param turnoId ID del turno a tomar.
+	 * @param usuarioId ID del usuario que desea tomar el turno.
+	 * @param departamentoId ID del departamento del usuario.
+	 * @return Mono<Turno> con el turno actualizado si la operación fue exitosa.
+	 */
+	Mono<Turno> tomarTurno(String turnoId, String usuarioId, String departamentoId);
 }

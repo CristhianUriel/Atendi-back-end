@@ -1,76 +1,78 @@
 package com.mx.atendi.websocket;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.web.reactive.socket.WebSocketHandler;
+import org.springframework.web.reactive.socket.WebSocketSession;
+
+import com.mx.atendi.entity.Turno;
+import com.mx.atendi.security.JwtUtil;
 import com.mx.atendi.service.ITurnoService;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.reactive.socket.WebSocketHandler;
-import org.springframework.web.reactive.socket.WebSocketMessage;
-import org.springframework.web.reactive.socket.WebSocketSession;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import java.util.Arrays;
-import java.util.List;
+import reactor.core.publisher.Sinks;
 
 @Slf4j
 public class TurnoWebSocketHandler implements WebSocketHandler {
-
     private final ITurnoService turnoService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final JwtUtil jwtUtil;
+    private final Sinks.Many<Turno> sink;
+    private final Map<String, WebSocketSession> sessionMap = new ConcurrentHashMap<>();
 
-    public TurnoWebSocketHandler(ITurnoService turnoService) {
+    public TurnoWebSocketHandler(ITurnoService turnoService, JwtUtil jwtUtil) {
         this.turnoService = turnoService;
+        this.jwtUtil = jwtUtil;
+        this.sink = Sinks.many().multicast().onBackpressureBuffer();
     }
 
-    /**
-     * Maneja la conexión WebSocket.
-     * Se espera que la query string incluya "Tipos-Operacion" (ej.: ?Tipos-Operacion=registro,pago)
-     * y que el header "Hospital-Id" esté presente para filtrar los turnos.
-     *
-     * @param session La sesión WebSocket.
-     * @return Mono que indica la finalización del manejo de la sesión.
-     */
     @Override
     public Mono<Void> handle(WebSocketSession session) {
-        // Obtener la query string a partir del HandshakeInfo
-        final String query = session.getHandshakeInfo().getUri().getQuery();
-        final List<String> tiposOperacion ;
-        if (query != null && query.contains("Tipos-Operacion=")) {
-            String param = query.split("Tipos-Operacion=")[1];
-            tiposOperacion = Arrays.asList(param.split(","));
-        }else {
-        	tiposOperacion = List.of();
+        String uri = session.getHandshakeInfo().getUri().toString();
+        String authHeader = session.getHandshakeInfo().getHeaders().getFirst("Authorization");
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.warn("Conexión WebSocket rechazada: Token JWT no proporcionado.");
+            return session.close();
         }
-        // Obtener el Hospital-Id del header
-        String hospitalId = session.getHandshakeInfo().getHeaders().getFirst("Hospital-Id");
-        log.info("Nueva conexión WebSocket para hospital {} con operaciones permitidas: {}", hospitalId, tiposOperacion);
 
-        // Filtrar turnos: se envían solo aquellos que estén en estado "pendiente" y
-        // que tengan al menos un tipo de operación que coincida con los permitidos.
-        Flux<WebSocketMessage> output = turnoService.streamTurnos(hospitalId)
-            .filter(turno -> {
-                // Asegurarse de que el turno esté pendiente y que la lista de tipos no sea nula.
-                if (!"pendiente".equals(turno.getEstado()) || turno.getTipoOperacion() == null) {
-                    return false;
-                }
-                // Retorna true si existe al menos un tipo permitido en la lista del turno.
-                return turno.getTipoOperacion().stream()
-                        .anyMatch(op -> tiposOperacion.contains(op));
-            })
-            .map(turno -> {
-                try {
-                    // Serializa el turno a JSON y crea un mensaje de texto.
-                    String json = objectMapper.writeValueAsString(turno);
-                    return session.textMessage(json);
-                } catch (Exception e) {
-                    log.error("Error al serializar turno", e);
-                    return session.textMessage("Error al serializar turno");
-                }
-            });
+        String token = authHeader.replace("Bearer ", "");
+        Authentication authentication = jwtUtil.validateToken(token);
 
-        // Envía el flujo de mensajes al cliente WebSocket.
-        return session.send(output);
+        if (authentication == null) {
+            log.warn("Conexión WebSocket rechazada: Token JWT inválido.");
+            return session.close();
+        }
+
+        String usuarioId = authentication.getName();
+        String hospitalId = null ;
+        String departamentoId = null;
+        if (authentication.getDetails() instanceof Map) {
+            Map<String, String> detalles = (Map<String, String>) authentication.getDetails();
+            hospitalId = detalles.get("hospitalId");
+            departamentoId = detalles.get("departamentoId");
+            log.info("✅ Usuario conectado con hospitalId: {}, departamentoId: {}", hospitalId, departamentoId);
+        }
+        boolean esMonitor = uri.contains("/stream/global");
+
+        log.info("Usuario conectado al WebSocket: {}, Departamento: {}, Monitor: {}", usuarioId, departamentoId, esMonitor);
+
+        Flux<Turno> turnosStream = esMonitor
+                ? turnoService.streamTurnos(hospitalId, null, true)  // 🔥 Monitor ve todos los turnos
+                : turnoService.streamTurnos(hospitalId, departamentoId, false);  // 🔥 Ventanilla ve solo su departamento
+
+        sessionMap.put(usuarioId, session);
+
+        return Mono.defer(() -> 
+                session.send(turnosStream.map(turno -> session.textMessage(turno.toString())))
+        ).doFinally(signalType -> {
+            sessionMap.remove(usuarioId);
+            log.info("Usuario desconectado del WebSocket: {}", usuarioId);
+        });
     }
 }
 

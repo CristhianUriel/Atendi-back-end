@@ -6,11 +6,14 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextImpl;
 import org.springframework.security.web.server.context.ServerSecurityContextRepository;
 import org.springframework.web.server.ServerWebExchange;
+
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
 /**
  * Extrae el token JWT del header Authorization y construye el SecurityContext.
  */
+@Slf4j
 public class JwtSecurityContextRepository implements ServerSecurityContextRepository {
 
     private final JwtAuthenticationManager authenticationManager;
@@ -28,11 +31,15 @@ public class JwtSecurityContextRepository implements ServerSecurityContextReposi
     @Override
     public Mono<SecurityContext> load(ServerWebExchange exchange) {
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        log.info("header : {}",authHeader);
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String authToken = authHeader.substring(7);
-            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(authToken, authToken);
+            
+            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(authToken, null);
+
             return authenticationManager.authenticate(auth)
-                    .map(SecurityContextImpl::new);
+                    .map(authenticatedUser -> (SecurityContext) new SecurityContextImpl(authenticatedUser)) // 🔥 Conversión explícita
+                    .switchIfEmpty(Mono.empty());
         }
         return Mono.empty();
     }

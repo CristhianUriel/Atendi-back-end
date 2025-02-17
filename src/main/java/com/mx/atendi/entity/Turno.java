@@ -20,11 +20,10 @@ public class Turno {
 	@Id
 	private String id; // Identificador con nomenclatura: OP-NNN (ej. "RE-001")
 	private String hospitalId; // Referencia al ID único del hospital (obtenido del documento Hospital)
-	private String usuario; // Usuario que genera el turno
-	private String servicio; // Servicio asociado al turno
-	private List<String> tipoOperacion; // Ej: ["registro", "pago", "consulta"]
-	private String estado; // "pendiente", "tomado", "atendido", "no-atendido"
-	private String ventanilla; // Ventanilla asignada (si aplica)
+    private String departamentoId;
+    private String usuarioAtendidoId; // ID del usuario que tomó el turno
+    private String estado; // pendiente, en proceso, atendido, no atendido
 	private LocalDateTime horaCreacion; // Fecha y hora de creación
 	private LocalDateTime horaActualizacion; // Fecha y hora de la última actualización
+
 }

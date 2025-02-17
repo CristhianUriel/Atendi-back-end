@@ -1,6 +1,9 @@
 package com.mx.atendi.controller;
 
+import java.util.Map;
+
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,36 +41,25 @@ public class TurnoController {
      * @param hospitalId ID del hospital (se envía en el header).
      * @return Mono con el turno creado.
      */
-    @Operation(summary = "Crear turno", description = "Crea un nuevo turno para un hospital")
-    @PostMapping
-    public Mono<Turno> crearTurno(@RequestBody Turno turno, @RequestHeader("Hospital-Id") String hospitalId) {
-        turno.setHospitalId(hospitalId);
-        return turnoService.crearTurno(turno);
-    }
+	@PostMapping
+	@Operation(summary = "Crear un nuevo turno", description = "Solo los administradores y recepcionistas pueden crear turnos")
+	public Mono<Turno> crearTurno(@RequestBody Turno turno, Authentication authentication) {
+	    String rolUsuario = authentication.getAuthorities().iterator().next().getAuthority();
+	    return turnoService.crearTurno(turno, rolUsuario);
+	}
 
-    /**
-     * Actualiza el estado de un turno.
+	 /**
+     * Obtiene los turnos pendientes de un **departamento específico** en tiempo real.
+     * Este endpoint está diseñado para los **usuarios de ventanilla**, que solo deben ver los turnos de su departamento.
      *
-     * @param id     ID del turno.
-     * @param estado Nuevo estado del turno.
-     * @return Mono con el turno actualizado.
+     * @param hospitalId    ID del hospital donde se encuentran los turnos.
+     * @param departamentoId ID del departamento del cual se desean obtener turnos.
+     * @return Flux<Turno> con la lista de turnos pendientes en tiempo real para el departamento especificado.
      */
-    @Operation(summary = "Actualizar estado", description = "Actualiza el estado de un turno")
-    @PutMapping("/{id}/estado")
-    public Mono<Turno> actualizarEstado(@PathVariable String id, @RequestParam String estado) {
-        return turnoService.actualizarEstado(id, estado);
-    }
-
-    /**
-     * Proporciona un stream de turnos en tiempo real para un hospital (para monitores).
-     *
-     * @param hospitalId ID del hospital (en header).
-     * @return Flux con los turnos en tiempo real.
-     */
-    @Operation(summary = "Stream de turnos", description = "Obtiene un stream de turnos en tiempo real para un hospital (para monitores)")
-    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<Turno> streamTurnos(@RequestHeader("Hospital-Id") String hospitalId) {
-        return turnoService.streamTurnos(hospitalId);
+    @GetMapping("/stream/departamento/{hospitalId}/{departamentoId}")
+    @Operation(summary = "Ver turnos por departamento", description = "Muestra turnos pendientes solo del departamento asignado")
+    public Flux<Turno> streamTurnosPorDepartamento(@PathVariable String hospitalId, @PathVariable String departamentoId) {
+        return turnoService.streamTurnos(hospitalId, departamentoId, false);
     }
 
     /**
@@ -78,9 +70,49 @@ public class TurnoController {
      * @return Flux con los turnos filtrados.
      */
     @Operation(summary = "Stream de turnos por operación", description = "Obtiene un stream de turnos pendientes filtrados por el tipo de operación (para ventanillas)")
-    @GetMapping(value = "/stream/{tipoOperacion}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<Turno> streamTurnosPorOperacion(@RequestHeader("Hospital-Id") String hospitalId,
-                                                 @PathVariable String tipoOperacion) {
-        return turnoService.streamTurnosPorOperacion(hospitalId, java.util.List.of(tipoOperacion));
+ // 🔵 Obtener últimos turnos atendidos para mostrar en la pantalla
+    @GetMapping("/ultimos-atendidos/{hospitalId}")
+    public Flux<Turno> obtenerTurnosUltimosAtendidos(@PathVariable String hospitalId, @RequestParam(defaultValue = "5") int cantidad) {
+        return turnoService.obtenerTurnosUltimosAtendidos(hospitalId, cantidad);
+    }
+    
+    /**
+     * Permite que un usuario tome un turno y lo marque como "en proceso".
+     * Solo un usuario de ventanilla puede tomar turnos de su propio departamento.
+     * Si el turno ya fue tomado por otro usuario, se generará un error.
+     *
+     * @param turnoId       ID del turno a tomar.
+     * @param authentication Información del usuario autenticado que realiza la acción.
+     * @return Mono<Turno> con la información del turno actualizado.
+     */
+    @PutMapping("/{turnoId}/tomar")
+    @Operation(summary = "Tomar un turno", description = "Asigna un turno a un usuario dentro de su departamento")
+    public Mono<Turno> tomarTurno(@PathVariable String turnoId, Authentication authentication) {
+        String usuarioId = authentication.getName();
+        String departamentoId = null;
+        String hospitalId = null;
+        if (authentication.getDetails() instanceof Map) {
+        	 Map<String, String> detalles = (Map<String, String>) authentication.getDetails();
+             hospitalId = detalles.get("hospitalId");
+             departamentoId = detalles.get("departamentoId");
+        }
+       
+        return turnoService.tomarTurno(turnoId, usuarioId, departamentoId);
+    }
+    
+    /**
+     * Finaliza un turno, marcándolo como "atendido" o "no atendido".
+     * Solo el usuario que tomó el turno puede finalizarlo.
+     *
+     * @param turnoId       ID del turno a finalizar.
+     * @param estadoFinal   Estado final del turno ("atendido" o "no atendido").
+     * @param authentication Información del usuario autenticado que realiza la acción.
+     * @return Mono<Turno> con la información del turno finalizado.
+     */
+    @PutMapping("/{turnoId}/finalizar")
+    @Operation(summary = "Finalizar un turno", description = "Marca un turno como atendido o no atendido")
+    public Mono<Turno> finalizarTurno(@PathVariable String turnoId, @RequestParam String estadoFinal, Authentication authentication) {
+        String usuarioId = authentication.getName();
+        return turnoService.finalizarTurno(turnoId, usuarioId, estadoFinal);
     }
 }

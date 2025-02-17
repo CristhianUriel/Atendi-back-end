@@ -54,7 +54,7 @@ public class LoginController {
                         return Mono.error(new RuntimeException("Credenciales inválidas"));
                     }
                     // Generar el token JWT con los datos del usuario
-                    String token = jwtUtil.generateToken(loginRequest.getUserName(), usuario.getRol(), hospitalId);
+                    String token = jwtUtil.generateToken(loginRequest.getUserName(), usuario.getRol(), hospitalId, usuario.getDepartamentoId());
                     return Mono.just(Map.of("token", token));
                 });
     }
