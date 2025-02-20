@@ -2,6 +2,8 @@ package com.mx.atendi.service;
 
 
 
+import java.util.List;
+
 import com.mx.atendi.entity.VentanillaCatalogo;
 
 import reactor.core.publisher.Flux;
@@ -50,6 +52,8 @@ public interface IVentanillaCatalogoService {
 	Mono<VentanillaCatalogo> obtenerVentanillaPorId(String id);
 
 	Mono<VentanillaCatalogo> cambiarEstadoVentanilla(String id, boolean activo);
+	
+	Flux<VentanillaCatalogo> obtenerVentanillasPorIds(List<String> ids);
 
 
 

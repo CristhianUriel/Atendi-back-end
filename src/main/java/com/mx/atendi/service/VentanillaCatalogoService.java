@@ -1,6 +1,9 @@
 package com.mx.atendi.service;
 
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 
 import com.mx.atendi.entity.VentanillaCatalogo;
@@ -81,6 +84,8 @@ public class VentanillaCatalogoService implements IVentanillaCatalogoService {
         return ventanillaCatalogoRepository.findById(id);
     }
     
+    
+    
     @Override
     public Mono<VentanillaCatalogo> cambiarEstadoVentanilla(String id, boolean activo) {
         return ventanillaCatalogoRepository.findById(id)
@@ -90,6 +95,12 @@ public class VentanillaCatalogoService implements IVentanillaCatalogoService {
                     return ventanillaCatalogoRepository.save(existingVentanilla);
                 }).doOnSuccess(v -> log.info("Ventanilla {} {}", v.getId(), activo ? "activada" : "desactivada"));
     }
+
+	@Override
+	public Flux<VentanillaCatalogo> obtenerVentanillasPorIds(List<String> ids) {
+		// TODO Auto-generated method stub
+		return ventanillaCatalogoRepository.findByIdIn(ids);
+	}
 
 
 

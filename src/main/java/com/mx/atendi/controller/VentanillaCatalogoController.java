@@ -3,6 +3,8 @@ package com.mx.atendi.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import java.util.List;
+
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -74,7 +76,18 @@ public class VentanillaCatalogoController {
     	validarUsuarioAutenticado(authentication);
         return ventanillaCatalogoService.obtenerTodasVentanillas();
     }
-
+    
+    /**
+     * Obtiene todas las ventanillas registrada atraves de una lista.
+     *
+     * @return Flux<VentanillaCatalogo> con la lista de ventanillas disponibles.
+     */
+    @GetMapping(path = "/ventanillas-ids")
+    @Operation(summary = "Obtener todas las ventanillas", description = "Devuelve la lista de ventanillas registradas")
+    public Flux<VentanillaCatalogo> obtenerTodasVentanillasPorListaIds(@RequestBody List<String>ids, Authentication authentication) {
+    	validarUsuarioAutenticado(authentication);
+        return ventanillaCatalogoService.obtenerVentanillasPorIds(ids);
+    }
     /**
      * Activa o desactiva una ventanilla.
      *
