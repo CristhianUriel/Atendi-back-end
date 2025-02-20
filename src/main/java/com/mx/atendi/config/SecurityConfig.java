@@ -28,38 +28,53 @@ public class SecurityConfig {
         JwtAuthenticationManager authenticationManager = new JwtAuthenticationManager(jwtUtil);
         JwtSecurityContextRepository securityContextRepository = new JwtSecurityContextRepository(authenticationManager);
 
-        return http
-                .csrf(csrf -> csrf.disable()) // ❌ CSRF no es necesario en APIs REST
-                .authorizeExchange(exchange -> exchange
-                        .pathMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()  // ✅ Swagger público
-                        .pathMatchers(HttpMethod.POST, "/api/auth/login").permitAll()  // ✅ Login público
-                        .pathMatchers(HttpMethod.GET, "/actuator/**").permitAll() //.hasRole("ADMIN")   🔒 Solo ADMIN puede ver Actuator
-                        .pathMatchers(HttpMethod.POST, "/api/hospitales/**").permitAll() //.hasAnyRole("ADMIN", "SUPERUSER")  // 🔒 Restringido
-                        .pathMatchers(HttpMethod.POST, "/api/usuarios/**").permitAll()//.hasRole("ADMIN") // 🔒 Solo ADMIN puede crear usuarios
-                        .pathMatchers(HttpMethod.GET, "/api/usuarios/**").permitAll()//.hasRole("ADMIN") // 🔒 Solo ADMIN puede crear usuarios
-                        .pathMatchers("/api/turnos/stream/**").authenticated() 
-                        .anyExchange().authenticated() // 🔒 Todo lo demás requiere autenticación
-                )
-                .authenticationManager(authenticationManager)
-                .securityContextRepository(securityContextRepository)
-                .build();
+		return http.cors(cors -> cors.configurationSource(request -> {
+			CorsConfiguration config = new CorsConfiguration();
+			config.setAllowedOrigins(List.of("*")); // 🔥 Permite solicitudes desde cualquier origen
+			config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+			config.setAllowedHeaders(List.of("Authorization", "Content-Type","Hospital-Id","Accept"));
+			//config.setExposedHeaders(List.of("Authorization", "Content-Type","Hospital-Id","Accept"));
+			//config.setAllowCredentials(true);
+			return config;
+		})).csrf(csrf -> csrf.disable()) // ❌ CSRF no es necesario en APIs REST
+				.authorizeExchange(exchange -> exchange.pathMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll() // ✅
+																														// Swagger
+																														// público
+						.pathMatchers(HttpMethod.POST, "/api/auth/login").permitAll() // ✅ Login público
+						.pathMatchers(HttpMethod.GET, "/actuator/**").permitAll() // .hasRole("ADMIN") 🔒 Solo ADMIN
+																					// puede ver Actuator
+						.pathMatchers(HttpMethod.POST, "/api/hospitales/**").permitAll() // .hasAnyRole("ADMIN",
+																							// "SUPERUSER") // 🔒
+																							// Restringido
+						.pathMatchers(HttpMethod.POST, "/api/usuarios/**").permitAll()// .hasRole("ADMIN") // 🔒 Solo
+																						// ADMIN puede crear usuarios
+						.pathMatchers(HttpMethod.GET, "/api/usuarios/**").permitAll()// .hasRole("ADMIN") // 🔒 Solo
+																						// ADMIN puede crear usuarios
+						.pathMatchers("/api/turnos/stream/**").authenticated().anyExchange().authenticated() // 🔒 Todo
+																												// lo
+																												// demás
+																												// requiere
+																												// autenticación
+				).authenticationManager(authenticationManager).securityContextRepository(securityContextRepository)
+				.build();
     }
     
 	// 🔥 Filtro de CORS global con restricciones más seguras
-	@Bean
-	public CorsWebFilter corsWebFilter() {
-		CorsConfiguration corsConfig = new CorsConfiguration();
-
-		// 🔒 Restringe los dominios permitidos en producción
-		corsConfig.setAllowedOrigins(List.of("*")); // (List.of("https://miapp.com", "https://admin.miapp.com"));
-		corsConfig.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-		// corsConfig.setAllowedHeaders(List.of("*"));
-		corsConfig.setAllowedHeaders(List.of("Authorization", "Content-Type"));
-		corsConfig.setExposedHeaders(List.of("Authorization"));
-		// corsConfig.setExposedHeaders(List.of("Authorization", "Content-Type"));
-
-		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-		source.registerCorsConfiguration("/**", corsConfig);
-		return new CorsWebFilter(source);
-	}
+	//@Bean
+//	public CorsWebFilter corsWebFilter() {
+//		CorsConfiguration corsConfig = new CorsConfiguration();
+//
+//		// 🔒 Restringe los dominios permitidos en producción
+//		corsConfig.setAllowedOrigins(List.of("http://localhost:4200")); // (List.of("https://miapp.com", "https://admin.miapp.com"));
+//		corsConfig.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+//		 corsConfig.setAllowedHeaders(List.of("*"));
+//		//corsConfig.setAllowedHeaders(List.of("Authorization", "Content-Type","Hospital-Id"));
+//		corsConfig.setExposedHeaders(List.of("Authorization","Content-Type","Hospital-Id"));
+//		corsConfig.setAllowCredentials(true);
+//		// corsConfig.setExposedHeaders(List.of("Authorization", "Content-Type"));
+//
+//		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+//		source.registerCorsConfiguration("/**", corsConfig);
+//		return new CorsWebFilter(source);
+//	}
 }
