@@ -12,6 +12,6 @@ import reactor.core.publisher.Flux;
 
 public interface VentanillaCatalogoRepository extends ReactiveMongoRepository<VentanillaCatalogo, String> {
 	
-	Flux<VentanillaCatalogo> findByIdIn(List<String> ids);
+	Flux<VentanillaCatalogo> findByIdInAndActivoTrue(List<String> ids);
 }
 

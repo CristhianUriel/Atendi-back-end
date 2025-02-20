@@ -99,7 +99,7 @@ public class VentanillaCatalogoService implements IVentanillaCatalogoService {
 	@Override
 	public Flux<VentanillaCatalogo> obtenerVentanillasPorIds(List<String> ids) {
 		// TODO Auto-generated method stub
-		return ventanillaCatalogoRepository.findByIdIn(ids);
+		return ventanillaCatalogoRepository.findByIdInAndActivoTrue(ids);
 	}
 
 
