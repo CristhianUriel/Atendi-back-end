@@ -39,9 +39,6 @@ public class UsuarioService implements IUsuarioService {
      */
     @Override
     public Mono<Usuario> crearUsuario(Usuario usuario, String rolAdmin) {
-    	if (!"ADMINISTRADOR".equalsIgnoreCase(rolAdmin)) {
-            return Mono.error(new RuntimeException("Solo un administrador puede crear usuarios"));
-        }
         return usuarioRepository.save(usuario)
                 .doOnNext(savedUser -> log.info("Usuario creado: {}", savedUser));
     }
@@ -83,10 +80,6 @@ public class UsuarioService implements IUsuarioService {
      */
 	@Override
     public Mono<Usuario> asignarDepartamentoYVentanilla(String userId, String departamentoId, String ventanillaId, String rolAdmin) {
-        if (!"ADMINISTRADOR".equals(rolAdmin)) {
-            return Mono.error(new RuntimeException("Solo un administrador puede asignar departamentos y ventanillas"));
-        }
-
         return departamentoRepository.findById(departamentoId)
                 .flatMap(departamento -> {
                     if (!departamento.getVentanillasIds().contains(ventanillaId)) {
@@ -112,9 +105,6 @@ public class UsuarioService implements IUsuarioService {
 	 */
 	@Override
 	public Mono<Void> eliminarUsuarioPorId(String userId, String rolAdmin) {
-	    if (!"ADMINISTRADOR".equals(rolAdmin)) {
-	        return Mono.error(new RuntimeException("Solo un administrador puede eliminar usuarios"));
-	    }
 	    return usuarioRepository.findById(userId)
 	            .flatMap(usuario -> usuarioRepository.delete(usuario))
 	            .doOnSuccess(v -> log.info("Usuario eliminado: {}", userId));
