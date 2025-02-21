@@ -82,7 +82,7 @@ public class VentanillaCatalogoController {
      *
      * @return Flux<VentanillaCatalogo> con la lista de ventanillas disponibles.
      */
-    @GetMapping(path = "/ventanillas-ids")
+    @PostMapping(path = "/ventanillas-ids")
     @Operation(summary = "Obtener todas las ventanillas", description = "Devuelve la lista de ventanillas registradas")
     public Flux<VentanillaCatalogo> obtenerTodasVentanillasPorListaIds(@RequestBody List<String>ids, Authentication authentication) {
     	validarUsuarioAutenticado(authentication);
