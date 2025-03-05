@@ -18,12 +18,14 @@ import java.util.List;
 @Document(collection = "turnos")
 public class Turno {
 	@Id
-	private String id; // Identificador con nomenclatura: OP-NNN (ej. "RE-001")
+	private String id; // 🔥 ID de MongoDB (NO lo usaremos como número de turno)
+	private String numeroTurno; // 🔥 Turno alfanumérico (A001, A002, ..., Z999, AA001)
 	private String hospitalId; // Referencia al ID único del hospital (obtenido del documento Hospital)
     private String departamentoId;
-    private String usuarioAtendidoId; // ID del usuario que tomó el turno
+    private String tipoOperacion;
+    private String atendidoPor; // 🔥 Usuario que atendió el turno
     private String estado; // pendiente, en proceso, atendido, no atendido
 	private LocalDateTime horaCreacion; // Fecha y hora de creación
-	private LocalDateTime horaActualizacion; // Fecha y hora de la última actualización
+	private LocalDateTime horaAtencion; // Fecha y hora de la última actualización
 
 }

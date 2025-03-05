@@ -2,6 +2,7 @@ package com.mx.atendi.service;
 
 import java.util.List;
 
+import com.mx.atendi.entity.HistorialTurnos;
 import com.mx.atendi.entity.Turno;
 
 
@@ -33,7 +34,7 @@ public interface ITurnoService {
 	 * @param cantidad Número de turnos a devolver
 	 * @return Flux con los últimos turnos atendidos
 	 */
-	Flux<Turno> obtenerTurnosUltimosAtendidos(String hospitalId, int cantidad);
+	Flux<HistorialTurnos> obtenerTurnosUltimosAtendidos(String hospitalId, int cantidad);
 
 	/**
 	 * Finaliza un turno, marcándolo como atendido o no atendido.

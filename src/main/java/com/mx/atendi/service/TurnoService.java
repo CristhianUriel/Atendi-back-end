@@ -2,16 +2,14 @@ package com.mx.atendi.service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-
 import com.mx.atendi.entity.Turno;
+import com.mx.atendi.entity.HistorialTurnos;
+import com.mx.atendi.entity.ContadorTurnos;
 import com.mx.atendi.repository.TurnoRepository;
-
+import com.mx.atendi.repository.ContadorTurnosRepository;
+import com.mx.atendi.repository.HistorialTurnosRepository;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -21,29 +19,28 @@ import reactor.core.publisher.Sinks;
 @Slf4j
 public class TurnoService implements ITurnoService {
 
-	private final TurnoRepository turnoRepository;
-	private final Sinks.Many<Turno> sink;
-	private final ConcurrentHashMap<String, AtomicInteger> contadorTurnosPorDepartamento;
-	private LocalDate fechaUltimoReset;
-	
-	public TurnoService(TurnoRepository turnoRepository) {
-		this.turnoRepository = turnoRepository;
-		// Usamos un Sink que emite y guarda el historial de turnos para nuevos
-		// suscriptores.
-		this.sink = Sinks.many().replay().all();
-		this.contadorTurnosPorDepartamento = new ConcurrentHashMap<>();
-		this.fechaUltimoReset = LocalDate.now();
-	}
+    private final TurnoRepository turnoRepository;
+    private final ContadorTurnosRepository contadorTurnosRepository;
+    private final HistorialTurnosRepository historialTurnosRepository;
+    private final Sinks.Many<Turno> sink;
 
-	/**
-     * Crea un turno asignándole un ID basado en la nomenclatura (por ejemplo, "RE-001") y emite el turno creado.
+    public TurnoService(TurnoRepository turnoRepository, ContadorTurnosRepository contadorTurnosRepository, HistorialTurnosRepository historialTurnosRepository) {
+        this.turnoRepository = turnoRepository;
+        this.contadorTurnosRepository = contadorTurnosRepository;
+        this.historialTurnosRepository = historialTurnosRepository;
+        this.sink = Sinks.many().replay().all();
+    }
+
+    /**
+     * Crea un turno asignándole un identificador alfanumérico único
+     * basado en el hospital y departamento, y lo emite en tiempo real.
      *
      * @param turno El turno a crear.
-     * @return Mono que emite el turno guardado.
+     * @param rolUsuario Rol del usuario que intenta crear el turno.
+     * @return Mono<Turno> con el turno guardado.
      */
     @Override
     public Mono<Turno> crearTurno(Turno turno, String rolUsuario) {
-        // Solo los administradores y recepcionistas pueden crear turnos
         if ("VENTANILLA".equals(rolUsuario)) {
             return Mono.error(new RuntimeException("Los usuarios de ventanilla no pueden crear turnos"));
         }
@@ -51,28 +48,19 @@ public class TurnoService implements ITurnoService {
         turno.setHoraCreacion(LocalDateTime.now());
         turno.setEstado("pendiente");
 
-        // Reiniciar el contador de turnos si es un nuevo día
-        verificarYReiniciarContador(turno.getHospitalId(), turno.getDepartamentoId());
-
-        // Generar un identificador alfanumérico para el turno
-        String key = turno.getHospitalId() + "-" + turno.getDepartamentoId();
-        int numero = contadorTurnosPorDepartamento.get(key).getAndIncrement();
-        String letraTurno = generarCodigoAlfanumerico(numero);
-        
-        turno.setId(letraTurno + "-" + String.format("%03d", numero));
-
-        return turnoRepository.save(turno)
-                .doOnNext(savedTurno -> {
-                    sink.tryEmitNext(savedTurno);
-                    log.info("Turno creado y emitido: {}", savedTurno);
+        return generarNumeroTurno(turno.getHospitalId(), turno.getDepartamentoId())
+                .flatMap(numeroTurno -> {
+                    turno.setNumeroTurno(numeroTurno);
+                    return turnoRepository.save(turno)
+                            .doOnNext(savedTurno -> {
+                                sink.tryEmitNext(savedTurno);
+                                log.info("Turno creado y emitido: {}", savedTurno);
+                            });
                 });
     }
 
     /**
      * Permite que un usuario tome un turno dentro de su departamento.
-     * - Solo los usuarios del mismo departamento pueden tomar el turno.
-     * - Un turno solo puede ser tomado si está en estado "pendiente".
-     * - Si otro usuario ya tomó el turno, se devuelve un error.
      *
      * @param turnoId ID del turno a tomar.
      * @param usuarioId ID del usuario que desea tomar el turno.
@@ -83,24 +71,20 @@ public class TurnoService implements ITurnoService {
     public Mono<Turno> tomarTurno(String turnoId, String usuarioId, String departamentoId) {
         return turnoRepository.findById(turnoId)
                 .flatMap(turno -> {
-                    // Verificar si el turno pertenece al mismo departamento del usuario
                     if (!turno.getDepartamentoId().equals(departamentoId)) {
                         return Mono.error(new RuntimeException("No puedes tomar turnos de otro departamento"));
                     }
 
-                    // Verificar si el turno ya fue tomado por otro usuario
-                    if (turno.getUsuarioAtendidoId() != null) {
+                    if (turno.getAtendidoPor() != null) {
                         return Mono.error(new RuntimeException("Este turno ya fue tomado por otro usuario"));
                     }
 
-                    // Asignar el turno al usuario y actualizar su estado
-                    turno.setUsuarioAtendidoId(usuarioId);
+                    turno.setAtendidoPor(usuarioId);
                     turno.setEstado("en proceso");
-                    turno.setHoraActualizacion(LocalDateTime.now());
+                    turno.setHoraAtencion(LocalDateTime.now());
 
                     return turnoRepository.save(turno)
                             .doOnNext(updatedTurno -> {
-                                // Emitir el turno actualizado para que se refleje en tiempo real
                                 sink.tryEmitNext(updatedTurno);
                                 log.info("Turno tomado por usuario {}: {}", usuarioId, updatedTurno);
                             });
@@ -108,7 +92,103 @@ public class TurnoService implements ITurnoService {
     }
 
     /**
-     * Finaliza un turno, marcándolo como atendido o no atendido.
+     * Devuelve un flujo de turnos pendientes en tiempo real.
+     *
+     * @param hospitalId ID del hospital.
+     * @param departamentoId ID del departamento (opcional).
+     * @param esMonitor Indica si es una vista global o filtrada.
+     * @return Flux<Turno> con los turnos en tiempo real.
+     */
+    @Override
+    public Flux<Turno> streamTurnos(String hospitalId, String departamentoId, boolean esMonitor) {
+        return sink.asFlux()
+                .filter(turno -> turno.getHospitalId().equals(hospitalId)
+                        && turno.getEstado().equals("pendiente")
+                        && (esMonitor || turno.getDepartamentoId().equals(departamentoId)));
+    }
+
+    /**
+     * Obtiene los últimos turnos atendidos para mostrarlos en la pantalla.
+     *
+     * @param hospitalId ID del hospital.
+     * @param cantidad Número de turnos a devolver.
+     * @return Flux<Turno> con los últimos turnos atendidos.
+     */
+    @Override
+    public Flux<HistorialTurnos> obtenerTurnosUltimosAtendidos(String hospitalId, int cantidad) {
+        return historialTurnosRepository.findAll()
+                .filter(turno -> turno.getHospitalId().equals(hospitalId))
+                .sort((t1, t2) -> t2.getHoraFinalizacion().compareTo(t1.getHoraFinalizacion()))
+                .take(cantidad);
+    }
+
+    /**
+     * Genera el siguiente número de turno alfanumérico basado en el último número registrado.
+     *
+     * @param hospitalId ID del hospital.
+     * @param departamentoId ID del departamento.
+     * @return Mono<String> con el número de turno generado.
+     */
+    private Mono<String> generarNumeroTurno(String hospitalId, String departamentoId) {
+        LocalDate hoy = LocalDate.now();
+
+        return contadorTurnosRepository.findByHospitalIdAndDepartamentoIdAndFecha(hospitalId, departamentoId, hoy)
+                .switchIfEmpty(Mono.defer(() -> {
+                    ContadorTurnos nuevoContador = new ContadorTurnos();
+                    nuevoContador.setHospitalId(hospitalId);
+                    nuevoContador.setDepartamentoId(departamentoId);
+                    nuevoContador.setFecha(hoy);
+                    nuevoContador.setUltimoTurno("A000");
+                    return contadorTurnosRepository.save(nuevoContador);
+                }))
+                .flatMap(contador -> {
+                    String nuevoNumero = generarSiguienteNumero(contador.getUltimoTurno());
+                    contador.setUltimoTurno(nuevoNumero);
+                    return contadorTurnosRepository.save(contador)
+                            .map(c -> nuevoNumero);
+                });
+    }
+
+    private String generarSiguienteNumero(String ultimo) {
+        String letras = ultimo.replaceAll("[0-9]", "");
+        int numeros = Integer.parseInt(ultimo.replaceAll("[^0-9]", ""));
+
+        if (numeros == 999) {
+            letras = siguienteLetra(letras);
+            numeros = 1;
+        } else {
+            numeros++;
+        }
+
+        return letras + String.format("%03d", numeros);
+    }
+
+    private String siguienteLetra(String letras) {
+        if (letras.isEmpty()) return "A";
+        char[] chars = letras.toCharArray();
+        for (int i = chars.length - 1; i >= 0; i--) {
+            if (chars[i] < 'Z') {
+                chars[i]++;
+                return new String(chars);
+            }
+            chars[i] = 'A';
+        }
+        return "A" + new String(chars);
+    }
+
+    /**
+     * Reinicia los contadores de turnos al final del día.
+     */
+    @Scheduled(cron = "0 0 0 * * *")
+    public void resetContadoresDiarios() {
+        log.info("🔄 Reiniciando contadores de turnos...");
+        contadorTurnosRepository.deleteAll().subscribe();
+    }
+
+    /**
+     * Finaliza un turno, marcándolo como "atendido" o "no atendido".
+     * - Mueve el turno a `historial_turnos` para reportes.
+     * - Elimina el turno de la colección principal `turnos`.
      *
      * @param turnoId ID del turno.
      * @param usuarioId ID del usuario que atendió el turno.
@@ -119,97 +199,29 @@ public class TurnoService implements ITurnoService {
     public Mono<Turno> finalizarTurno(String turnoId, String usuarioId, String estadoFinal) {
         return turnoRepository.findById(turnoId)
                 .flatMap(turno -> {
-                    if (!turno.getUsuarioAtendidoId().equals(usuarioId)) {
+                    if (turno.getAtendidoPor() == null || !turno.getAtendidoPor().equals(usuarioId)) {
                         return Mono.error(new RuntimeException("No puedes finalizar un turno que no tomaste"));
                     }
+
                     turno.setEstado(estadoFinal);
-                    turno.setHoraActualizacion(LocalDateTime.now());
-                    return turnoRepository.save(turno)
-                            .doOnNext(updatedTurno -> {
-                                sink.tryEmitNext(updatedTurno);
-                                log.info("Turno finalizado por usuario {}: {}", usuarioId, updatedTurno);
-                            });
+                    turno.setHoraAtencion(LocalDateTime.now());
+
+                    // 🔥 Guardar el turno en `historial_turnos`
+                    HistorialTurnos historial = new HistorialTurnos();
+                    historial.setNumeroTurno(turno.getNumeroTurno());
+                    historial.setHospitalId(turno.getHospitalId());
+                    historial.setDepartamentoId(turno.getDepartamentoId());
+                    historial.setTipoOperacion(turno.getTipoOperacion());
+                    historial.setEstado(estadoFinal);
+                    historial.setAtendidoPor(turno.getAtendidoPor());
+                    historial.setHoraCreacion(turno.getHoraCreacion());
+                    historial.setHoraAtencion(turno.getHoraAtencion());
+                    historial.setHoraFinalizacion(LocalDateTime.now());
+
+                    return historialTurnosRepository.save(historial)
+                            .then(turnoRepository.delete(turno)) // 🔥 Elimina el turno activo
+                            .thenReturn(turno);
                 });
     }
-
-
-    /**
-     * Devuelve un flujo de turnos pendientes en tiempo real.
-     *
-     * @param hospitalId ID del hospital
-     * @return Flux con los turnos pendientes
-     */
-    @Override
-    public Flux<Turno> streamTurnos(String hospitalId, String departamentoId, boolean esMonitor) {
-        return sink.asFlux()
-                .filter(turno -> turno.getHospitalId().equals(hospitalId)
-                        && turno.getEstado().equals("pendiente")
-                        && (esMonitor || turno.getDepartamentoId().equals(departamentoId))); 
-    }
-
-    /**
-     * Devuelve los últimos turnos atendidos para mostrarlos en la pantalla.
-     *
-     * @param hospitalId ID del hospital
-     * @param cantidad Número de turnos a devolver
-     * @return Flux con los últimos turnos atendidos
-     */
-    @Override
-    public Flux<Turno> obtenerTurnosUltimosAtendidos(String hospitalId, int cantidad) {
-        return turnoRepository.findAll()
-                .filter(turno -> turno.getHospitalId().equals(hospitalId) && !turno.getEstado().equals("pendiente"))
-                .sort((t1, t2) -> t2.getHoraActualizacion().compareTo(t1.getHoraActualizacion()))
-                .take(cantidad);
-    }
-    
-    
-    
-    
-    
-    private void verificarYReiniciarContador(String hospitalId, String departamentoId) {
-        String key = hospitalId + "-" + departamentoId;
-        LocalDateTime now = LocalDateTime.now();
-
-        // Si es un nuevo día, reiniciar el contador
-        if (!contadorTurnosPorDepartamento.containsKey(key) || now.getHour() == 0) {
-            contadorTurnosPorDepartamento.put(key, new AtomicInteger(0)); // Reinicia en 0
-            log.info("Se reinició la numeración de turnos para {} en el hospital {}", departamentoId, hospitalId);
-        }
-    }
-
-    /**
-     * Reinicia automáticamente los contadores de turnos a medianoche.
-     */
-    @Scheduled(cron = "0 0 0 * * *")
-    public void resetContadoresDiarios() {
-        log.info("🔄 Reiniciando contadores de turnos (Reset diario automático)...");
-        contadorTurnosPorDepartamento.clear();
-        fechaUltimoReset = LocalDate.now();
-    }
-
-    /**
-     * Permite resetear manualmente los contadores de turnos.
-     *
-     * @return Mono vacío cuando el reset se completa
-     */
-    public Mono<Void> resetContadoresManualmente() {
-        log.info("🔄 Reiniciando contadores de turnos (Reset manual)...");
-        contadorTurnosPorDepartamento.clear();
-        fechaUltimoReset = LocalDate.now();
-        return Mono.empty();
-    }
-    
-    private String generarCodigoAlfanumerico(int numero) {
-        StringBuilder codigo = new StringBuilder();
-
-        // Convertir número a secuencia alfabética
-        int base = 26; // Letras del abecedario
-        while (numero >= 0) {
-            codigo.insert(0, (char) ('A' + (numero % base)));
-            numero = (numero / base) - 1;
-        }
-
-        return codigo.toString();
-    }	
 
 }
