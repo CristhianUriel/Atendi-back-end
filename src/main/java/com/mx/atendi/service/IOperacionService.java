@@ -1,5 +1,7 @@
 package com.mx.atendi.service;
 
+import java.util.List;
+
 import com.mx.atendi.entity.Operacion;
 
 import reactor.core.publisher.Flux;
@@ -46,5 +48,7 @@ public interface IOperacionService {
 	 * @return Mono<Operacion> con la operación encontrada.
 	 */
 	Mono<Operacion> obtenerOperacionPorId(String id);
+	
+	Flux<Operacion> obtenerOperacionesPorIds(List<String> ids);
 
 }

@@ -1,6 +1,9 @@
 package com.mx.atendi.service;
 
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 
 import com.mx.atendi.entity.Operacion;
@@ -79,6 +82,12 @@ public class OperacionService  implements IOperacionService{
     @Override
     public Mono<Operacion> obtenerOperacionPorId(String id) {
         return operacionRepository.findById(id);
+    }
+    @Override
+    public Flux<Operacion> obtenerOperacionesPorIds(List<String> ids){
+    	// TODO Auto-generated method stub
+   return operacionRepository.findByIdIn(ids);
+    	
     }
 }
 

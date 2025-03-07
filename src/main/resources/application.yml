@@ -10,6 +10,7 @@ spring:
   data:
     mongodb:
       uri:   mongodb://admin:admin123@localhost:27017/atendi?authSource=admin
+
 # Configuración del puerto del servidor (opcional; por defecto 8080)
 server:
   port: 8080

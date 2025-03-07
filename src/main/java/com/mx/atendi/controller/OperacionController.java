@@ -3,11 +3,14 @@ package com.mx.atendi.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import java.util.List;
+
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import com.mx.atendi.entity.Operacion;
 import com.mx.atendi.service.IOperacionService;
+import com.mx.atendi.service.OperacionService;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -74,6 +77,18 @@ public class OperacionController {
     	 validarUsuarioAutenticado(authentication);
         return operacionService.obtenerTodasOperaciones();
     }
+    /**
+     * Obtiene todas las operaciones registrada atraves de una lista.
+     *
+     * @return Flux<Operacion> con la lista de operaciones disponibles.
+     */
+    @PostMapping(path = "/operaciones-ids")
+    @Operation(summary= "Obtener todas las operaciones", description = "Devuelve la lista de operaciones registradas")
+    public Flux<Operacion> obtenerTodasLasOperacionesPorListaIds(@RequestBody List<String>ids, Authentication authentication){
+    	validarUsuarioAutenticado(authentication);
+    	return operacionService.obtenerOperacionesPorIds(ids);
+    }
+    
     
     private void validarUsuarioAutenticado(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
