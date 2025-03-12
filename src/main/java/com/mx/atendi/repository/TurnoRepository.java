@@ -29,6 +29,6 @@ public interface TurnoRepository extends ReactiveMongoRepository<Turno, String>{
      */
     Mono<Turno> findByIdAndHospitalId(String id, String hospitalId);
     
-    Flux<Turno> findByHospitalIdAndDepartamentoIdAndEstado(String hospitalId, String departamentoId, String estado);
+    Flux<Turno> findByHospitalIdAndEstado(String hospitalId, String estado);
     
 }

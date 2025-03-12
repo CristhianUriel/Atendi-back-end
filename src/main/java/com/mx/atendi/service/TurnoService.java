@@ -103,10 +103,22 @@ public class TurnoService implements ITurnoService {
      */
     @Override
     public Flux<Turno> streamTurnos(String hospitalId, String departamentoId, boolean esMonitor) {
-        return sink.asFlux()
-                .filter(turno -> turno.getHospitalId().equals(hospitalId)
-                        && turno.getEstado().equals("pendiente")
-                        && (esMonitor || turno.getDepartamentoId().equals(departamentoId)));
+        // 1️ Obtener los turnos pendientes de la base de datos
+        Flux<Turno> turnosPendientes = Flux.defer(() -> 
+            turnoRepository.findByHospitalIdAndEstado(
+                hospitalId,  
+                "pendiente"
+            )
+        );
+
+        // 2️ Emitir turnos nuevos en tiempo real
+        Flux<Turno> turnosNuevos = sink.asFlux()
+            .filter(turno -> turno.getHospitalId().equals(hospitalId)
+                    && turno.getEstado().equals("pendiente")
+                    && (esMonitor || turno.getDepartamentoId().equals(departamentoId)));
+
+        // 3️ Combinar ambos flujos: turnos pendientes + turnos nuevos
+        return turnosPendientes.concatWith(turnosNuevos);
     }
 
     /**
