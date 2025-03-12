@@ -50,7 +50,8 @@ public class SecurityConfig {
 																						// ADMIN puede crear usuarios
 						.pathMatchers(HttpMethod.GET, "/api/usuarios/**").permitAll()// .hasRole("ADMIN") // 🔒 Solo
 																						// ADMIN puede crear usuarios
-						.pathMatchers("/api/turnos/stream/**").authenticated().anyExchange().authenticated() // 🔒 Todo
+						.pathMatchers("/api/turnos/stream/**").permitAll()
+						.anyExchange().authenticated() // 🔒 Todo
 																												// lo
 																												// demás
 																												// requiere

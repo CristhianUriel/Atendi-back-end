@@ -1,5 +1,6 @@
 package com.mx.atendi.repository;
 
+import org.reactivestreams.Publisher;
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.stereotype.Repository;
 
@@ -29,6 +30,7 @@ public interface TurnoRepository extends ReactiveMongoRepository<Turno, String>{
      */
     Mono<Turno> findByIdAndHospitalId(String id, String hospitalId);
     
-    Flux<Turno> findByHospitalIdAndEstado(String hospitalId, String estado);
+    Flux<Turno> findByHospitalIdAndDepartamentoIdAndEstado(String hospitalId,String departamentoId, String estado);
+    Flux<Turno>  findByHospitalIdAndEstado(String hospitalId, String string);
     
 }

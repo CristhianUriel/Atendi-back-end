@@ -102,24 +102,20 @@ public class TurnoService implements ITurnoService {
      * @return Flux<Turno> con los turnos en tiempo real.
      */
     @Override
-    public Flux<Turno> streamTurnos(String hospitalId, String departamentoId, boolean esMonitor) {
-        // 1️ Obtener los turnos pendientes de la base de datos
-        Flux<Turno> turnosPendientes = Flux.defer(() -> 
-            turnoRepository.findByHospitalIdAndEstado(
-                hospitalId,  
-                "pendiente"
-            )
-        );
+	public Flux<Turno> streamTurnos(String hospitalId, String departamentoId, boolean esMonitor) {
+		// 1️ Obtener los turnos pendientes de la base de datos
+		Flux<Turno> turnosPendientes = Flux.defer(() -> esMonitor
+				? turnoRepository.findByHospitalIdAndEstado(hospitalId, "pendiente")
+				: turnoRepository.findByHospitalIdAndDepartamentoIdAndEstado(hospitalId, departamentoId, "pendiente"));
 
-        // 2️ Emitir turnos nuevos en tiempo real
-        Flux<Turno> turnosNuevos = sink.asFlux()
-            .filter(turno -> turno.getHospitalId().equals(hospitalId)
-                    && turno.getEstado().equals("pendiente")
-                    && (esMonitor || turno.getDepartamentoId().equals(departamentoId)));
+		// 2️ Emitir turnos nuevos en tiempo real
+		Flux<Turno> turnosNuevos = sink.asFlux()
+				.filter(turno -> turno.getHospitalId().equals(hospitalId) && turno.getEstado().equals("pendiente")
+						&& (esMonitor || turno.getDepartamentoId().equals(departamentoId)));
 
-        // 3️ Combinar ambos flujos: turnos pendientes + turnos nuevos
-        return turnosPendientes.concatWith(turnosNuevos);
-    }
+		// 3️ Combinar ambos flujos: turnos pendientes + turnos nuevos
+		return turnosPendientes.concatWith(turnosNuevos);
+	}
 
     /**
      * Obtiene los últimos turnos atendidos para mostrarlos en la pantalla.
