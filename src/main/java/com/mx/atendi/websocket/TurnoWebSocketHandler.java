@@ -15,19 +15,16 @@ import com.mx.atendi.service.ITurnoService;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.Sinks;
 
 @Slf4j
 public class TurnoWebSocketHandler implements WebSocketHandler {
     private final ITurnoService turnoService;
     private final JwtUtil jwtUtil;
-    private final Sinks.Many<Turno> sink;
     private final Map<String, WebSocketSession> sessionMap = new ConcurrentHashMap<>();
 
     public TurnoWebSocketHandler(ITurnoService turnoService, JwtUtil jwtUtil) {
         this.turnoService = turnoService;
         this.jwtUtil = jwtUtil;
-        this.sink = Sinks.many().multicast().onBackpressureBuffer();
     }
 
     @Override
@@ -36,7 +33,7 @@ public class TurnoWebSocketHandler implements WebSocketHandler {
         String authHeader = session.getHandshakeInfo().getHeaders().getFirst("Authorization");
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            log.warn("Conexión WebSocket rechazada: Token JWT no proporcionado.");
+            log.warn("❌ Conexión WebSocket rechazada: Token JWT no proporcionado.");
             return session.close();
         }
 
@@ -44,37 +41,28 @@ public class TurnoWebSocketHandler implements WebSocketHandler {
         Authentication authentication = jwtUtil.validateToken(token);
 
         if (authentication == null) {
-            log.warn("Conexión WebSocket rechazada: Token JWT inválido.");
+            log.warn("❌ Conexión WebSocket rechazada: Token JWT inválido.");
             return session.close();
         }
 
         String usuarioId = authentication.getName();
-        String hospitalId = null ;
-        String departamentoId = null;
-        if (authentication.getDetails() instanceof Map) {
-            Map<String, String> detalles = (Map<String, String>) authentication.getDetails();
-            hospitalId = detalles.get("hospitalId");
-            departamentoId = detalles.get("departamentoId");
-            log.info("✅ Usuario conectado con hospitalId: {}, departamentoId: {}", hospitalId, departamentoId);
-        }
+        Map<String, String> detalles = (Map<String, String>) authentication.getDetails();
+        String hospitalId = detalles.get("hospitalId");
+        String departamentoId = detalles.get("departamentoId");
+
         boolean esMonitor = uri.contains("/stream/global");
 
-        log.info("Usuario conectado al WebSocket: {}, Departamento: {}, Monitor: {}", usuarioId, departamentoId, esMonitor);
+        log.info("✅ Usuario WebSocket: {} | Hospital: {} | Departamento: {} | Monitor: {}", 
+                 usuarioId, hospitalId, departamentoId, esMonitor);
 
-        Flux<Turno> turnosStream = esMonitor
-                ? turnoService.streamTurnos(hospitalId, null, true)  // 🔥 Monitor ve todos los turnos
-                : turnoService.streamTurnos(hospitalId, departamentoId, false);  // 🔥 Ventanilla ve solo su departamento
-
+        Flux<Turno> turnosStream = turnoService.streamTurnos(hospitalId, esMonitor ? null : departamentoId, esMonitor);
+        
         sessionMap.put(usuarioId, session);
 
-        return Mono.defer(() -> 
-                session.send(turnosStream.map(turno -> session.textMessage(turno.toString())))
-        ).doFinally(signalType -> {
-            sessionMap.remove(usuarioId);
-            log.info("Usuario desconectado del WebSocket: {}", usuarioId);
-        });
+        return session.send(turnosStream.map(turno -> session.textMessage(turno.toString())))
+                      .doFinally(signal -> {
+                          sessionMap.remove(usuarioId);
+                          log.info("🔌 Usuario desconectado: {}", usuarioId);
+                      });
     }
 }
-
-
-

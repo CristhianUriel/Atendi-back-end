@@ -46,31 +46,6 @@ public class TurnoController {
     }
 
     /**
-     * Devuelve un flujo de turnos en tiempo real para el monitor general.
-     *
-     * @param hospitalId ID del hospital.
-     * @return Flux<Turno> con los turnos pendientes.
-     */
-    @GetMapping("/stream/{hospitalId}")
-    @Operation(summary = "Ver turnos en tiempo real", description = "Muestra todos los turnos pendientes del hospital")
-    public Flux<Turno> streamTurnos(@PathVariable String hospitalId) {
-        return turnoService.streamTurnos(hospitalId, null, true);
-    }
-
-    /**
-     * Devuelve un flujo de turnos pendientes para el departamento de un usuario.
-     *
-     * @param hospitalId ID del hospital.
-     * @param departamentoId ID del departamento.
-     * @return Flux<Turno> con los turnos pendientes del departamento.
-     */
-    @GetMapping("/stream/departamento/{hospitalId}/{departamentoId}")
-    @Operation(summary = "Ver turnos por departamento", description = "Muestra turnos pendientes solo del departamento asignado")
-    public Flux<Turno> streamTurnosPorDepartamento(@PathVariable String hospitalId, @PathVariable String departamentoId) {
-        return turnoService.streamTurnos(hospitalId, departamentoId, false);
-    }
-
-    /**
      * Permite a un usuario tomar un turno de su departamento.
      *
      * @param turnoId ID del turno.
