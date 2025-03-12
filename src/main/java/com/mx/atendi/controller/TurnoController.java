@@ -34,7 +34,7 @@ public class TurnoController {
     @PostMapping
     @Operation(summary = "Crear un nuevo turno", description = "Permite crear un nuevo turno para un hospital y departamento")
     public Mono<Turno> crearTurno(@RequestBody Turno turno, Authentication authentication) {
-        String rolUsuario = authentication.getAuthorities().iterator().next().getAuthority().substring(5);
+        String rolUsuario = authentication.getAuthorities().iterator().next().getAuthority();
 
         return turnoService.crearTurno(turno, rolUsuario)
                 .onErrorResume(ex -> {

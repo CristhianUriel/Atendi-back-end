@@ -2,6 +2,8 @@ package com.mx.atendi.service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
+
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import com.mx.atendi.entity.Turno;
@@ -41,7 +43,7 @@ public class TurnoService implements ITurnoService {
      */
     @Override
     public Mono<Turno> crearTurno(Turno turno, String rolUsuario) {
-        if ("VENTANILLA".equals(rolUsuario)) {
+        if ("VENTANILLA".equalsIgnoreCase(rolUsuario)) {
             return Mono.error(new RuntimeException("Los usuarios de ventanilla no pueden crear turnos"));
         }
 
@@ -223,5 +225,18 @@ public class TurnoService implements ITurnoService {
                             .thenReturn(turno);
                 });
     }
+    
+    // Método para buscar un turno por su ID
+    @Override
+    public Mono<Turno> buscarTurnoPorId(String turnoId) {
+        return turnoRepository.findById(turnoId)
+                .switchIfEmpty(Mono.error(new RuntimeException("Turno no encontrado: " + turnoId)));
+    }
 
+    // Método para buscar múltiples turnos por sus IDs
+    @Override
+    public Flux<Turno> buscarVariosTurnos(List<String> turnosIds) {
+        return turnoRepository.findAllById(turnosIds)
+                .switchIfEmpty(Mono.error(new RuntimeException("No se encontraron los turnos especificados")));
+    }
 }

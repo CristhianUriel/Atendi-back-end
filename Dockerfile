@@ -1,14 +1,26 @@
-# Usa una imagen base de OpenJDK 17
+# 🔥 Usa la imagen base de OpenJDK 17
 FROM openjdk:17-jdk-slim
 
-# Directorio de trabajo dentro del contenedor
-WORKDIR /app
+# 🔥 Instalar CUPS y bibliotecas necesarias para impresión
+RUN apt-get update && \
+    apt-get install -y cups libcups2 cups-client && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copiar el archivo .jar generado en target/
+# 🔥 Configurar CUPS para permitir accesos
+RUN echo "ServerName localhost" > /etc/cups/client.conf && \
+    cupsctl --remote-admin --remote-any --share-printers
+
+# 🔥 Copiar el archivo JAR generado en target/
+WORKDIR /app
 COPY target/atendi-0.0.1-SNAPSHOT.jar backend.jar
 
-# Exponer el puerto de la aplicación (asegúrate de que coincida con el de tu Spring Boot)
-EXPOSE 8080
+# 🔥 Configurar permisos para CUPS (puertos y usuarios)
+RUN usermod -aG lpadmin root && chmod -R 777 /etc/cups
 
-# Ejecutar la aplicación
-CMD ["java", "-jar", "backend.jar"]
+# 🔥 Exponer puertos: 
+# 8080 para la API de Spring Boot
+# 631 para el servicio CUPS
+EXPOSE 8080 631
+
+# 🔥 Comando para iniciar CUPS y la aplicación Java
+CMD service cups start && java -jar backend.jar

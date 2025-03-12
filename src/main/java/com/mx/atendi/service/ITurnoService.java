@@ -57,4 +57,6 @@ public interface ITurnoService {
 	 * @return Mono<Turno> con el turno actualizado si la operación fue exitosa.
 	 */
 	Mono<Turno> tomarTurno(String turnoId, String usuarioId, String departamentoId);
+	Mono<Turno> buscarTurnoPorId(String turnoId);
+	Flux<Turno> buscarVariosTurnos(List<String> turnosIds);
 }

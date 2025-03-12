@@ -51,4 +51,6 @@ public interface IOperacionService {
 	
 	Flux<Operacion> obtenerOperacionesPorIds(List<String> ids);
 
+	Mono<String> obtenerNombrePorId(String operacionId);
+
 }

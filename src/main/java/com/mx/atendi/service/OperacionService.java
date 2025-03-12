@@ -83,11 +83,20 @@ public class OperacionService  implements IOperacionService{
     public Mono<Operacion> obtenerOperacionPorId(String id) {
         return operacionRepository.findById(id);
     }
+
+	@Override
+	public Flux<Operacion> obtenerOperacionesPorIds(List<String> ids) {
+		// TODO Auto-generated method stub
+		return operacionRepository.findByIdIn(ids);
+
+	}
+    
     @Override
-    public Flux<Operacion> obtenerOperacionesPorIds(List<String> ids){
-    	// TODO Auto-generated method stub
-   return operacionRepository.findByIdIn(ids);
-    	
+    public Mono<String> obtenerNombrePorId(String operacionId) {
+        return operacionRepository.findById(operacionId)
+                .map(Operacion::getNombre)
+                .switchIfEmpty(Mono.just("Desconocido"));
     }
 }
+
 

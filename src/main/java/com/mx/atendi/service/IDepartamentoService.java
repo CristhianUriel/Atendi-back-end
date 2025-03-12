@@ -47,4 +47,6 @@ public interface IDepartamentoService {
 	 */
 	Mono<Departamento> obtenerDepartamentoPorId(String id);
 
+	Mono<String> obtenerNombrePorId(String departamentoId);
+
 }
