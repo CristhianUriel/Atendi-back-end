@@ -8,6 +8,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketSession;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mx.atendi.entity.Turno;
 import com.mx.atendi.security.JwtUtil;
 import com.mx.atendi.service.ITurnoService;
@@ -41,35 +43,45 @@ public class TurnoWebSocketHandler implements WebSocketHandler {
         return incomingMessages
             .next() // Leer solo el primer mensaje (token)
             .flatMap(token -> {
-                if (!token.startsWith("Bearer ")) {
-                    log.warn("❌ Conexión WebSocket rechazada: Token JWT no proporcionado en el mensaje.");
-                    return session.close();
-                }
+            	try {
+            		ObjectMapper objectMapper = new ObjectMapper();
+                    JsonNode jsonNode = objectMapper.readTree(token);
+                    String newToken = jsonNode.has("token") ? jsonNode.get("token").asText() : null;
 
-                token = token.replace("Bearer ", "");
-                Authentication authentication = jwtUtil.validateToken(token);
+                    if (!newToken.startsWith("Bearer ")) {
+                        log.warn("❌ Conexión WebSocket rechazada: Token JWT no proporcionado en el mensaje.");
+                        return session.close();
+                    }
 
-                if (authentication == null) {
-                    log.warn("❌ Conexión WebSocket rechazada: Token JWT inválido.");
-                    return session.close();
-                }
+                    newToken = newToken.replace("Bearer ", "");
+                    Authentication authentication = jwtUtil.validateToken(newToken);
 
-                String usuarioId = authentication.getName();
-                Map<String, String> detalles = (Map<String, String>) authentication.getDetails();
-                String hospitalId = detalles.get("hospitalId");
-                String departamentoId = detalles.get("departamentoId");
+                    if (authentication == null) {
+                        log.warn("❌ Conexión WebSocket rechazada: Token JWT inválido.");
+                        return session.close();
+                    }
 
-                log.info("✅ Usuario WebSocket: {} | Hospital: {} | Departamento: {} | Monitor: {}", 
-                         usuarioId, hospitalId, departamentoId, esMonitor);
+                    String usuarioId = authentication.getName();
+                    Map<String, String> detalles = (Map<String, String>) authentication.getDetails();
+                    String hospitalId = detalles.get("hospitalId");
+                    String departamentoId = detalles.get("departamentoId");
 
-                Flux<Turno> turnosStream = turnoService.streamTurnos(hospitalId, esMonitor ? null : departamentoId, esMonitor)
-                    .doOnNext(turno -> log.info("📤 Enviando turno: {}", turno))
-                    .delayElements(Duration.ofSeconds(1)); // Asegurar que el flujo no se complete de inmediato
+                    log.info("✅ Usuario WebSocket: {} | Hospital: {} | Departamento: {} | Monitor: {}", 
+                             usuarioId, hospitalId, departamentoId, esMonitor);
 
-                sessionMap.put(usuarioId, session);
+                    Flux<Turno> turnosStream = turnoService.streamTurnos(hospitalId, esMonitor ? null : departamentoId, esMonitor)
+                        .doOnNext(turno -> log.info("📤 Enviando turno: {}", turno))
+                        .delayElements(Duration.ofSeconds(1)); // Asegurar que el flujo no se complete de inmediato
 
-                return session.send(turnosStream.map(turno -> session.textMessage(turno.toString())))
-                              .then(Mono.never()); // Mantener la conexión abierta
+                    sessionMap.put(usuarioId, session);
+
+                    return session.send(turnosStream.map(turno -> session.textMessage(turno.toString())))
+                                  .then(Mono.never()); // Mantener la conexión abierta
+				} catch (Exception e) {
+					// TODO: handle exception
+					log.error("❌ Error al procesar el JSON: ", e);
+			        return session.close();
+				}
             })
             .doOnError(error -> log.error("❌ Error en WebSocket: ", error))
             .then();
