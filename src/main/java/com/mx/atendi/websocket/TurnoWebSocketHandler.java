@@ -10,7 +10,7 @@ import org.springframework.web.reactive.socket.WebSocketSession;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mx.atendi.entity.Turno;
+import com.mx.atendi.dto.TurnoDTO;
 import com.mx.atendi.security.JwtUtil;
 import com.mx.atendi.service.ITurnoService;
 
@@ -69,7 +69,7 @@ public class TurnoWebSocketHandler implements WebSocketHandler {
                     log.info("✅ Usuario WebSocket: {} | Hospital: {} | Departamento: {} | Monitor: {}", 
                              usuarioId, hospitalId, departamentoId, esMonitor);
 
-                    Flux<Turno> turnosStream = turnoService.streamTurnos(hospitalId, esMonitor ? null : departamentoId, esMonitor)
+                    Flux<TurnoDTO> turnosStream = turnoService.streamTurnos(hospitalId, esMonitor ? null : departamentoId, esMonitor)
                         .doOnNext(turno -> log.info("📤 Enviando turno: {}", turno))
                         .delayElements(Duration.ofSeconds(1)); // Asegurar que el flujo no se complete de inmediato
 

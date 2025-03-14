@@ -2,6 +2,7 @@ package com.mx.atendi.service;
 
 import java.util.List;
 
+import com.mx.atendi.dto.TurnoDTO;
 import com.mx.atendi.entity.HistorialTurnos;
 import com.mx.atendi.entity.Turno;
 
@@ -19,14 +20,14 @@ public interface ITurnoService {
      * @param turno El turno a crear.
      * @return Mono que emite el turno creado.
      */
-	Mono<Turno> crearTurno(Turno turno, String rolUsuario);
+	Mono<TurnoDTO> crearTurno(Turno turno, String rolUsuario);
     /**
      * Devuelve un flujo de turnos en tiempo real para un hospital.
      *
      * @param hospitalId ID del hospital.
      * @return Flux que emite los turnos del hospital.
      */
-	 Flux<Turno> streamTurnos(String hospitalId, String departamentoId, boolean esMonitor);
+	 Flux<TurnoDTO> streamTurnos(String hospitalId, String departamentoId, boolean esMonitor);
 	/**
 	 * Devuelve los últimos turnos atendidos para mostrarlos en la pantalla.
 	 *
@@ -44,7 +45,7 @@ public interface ITurnoService {
 	 * @param estadoFinal Estado final del turno ("atendido" o "no atendido").
 	 * @return Mono<Turno> con el turno finalizado.
 	 */
-	Mono<Turno> finalizarTurno(String turnoId, String usuarioId, String estadoFinal);
+	Mono<TurnoDTO> finalizarTurno(String turnoId, String usuarioId, String estadoFinal);
 	/**
 	 * Permite que un usuario tome un turno dentro de su departamento.
 	 * - Solo los usuarios del mismo departamento pueden tomar el turno.
@@ -56,7 +57,7 @@ public interface ITurnoService {
 	 * @param departamentoId ID del departamento del usuario.
 	 * @return Mono<Turno> con el turno actualizado si la operación fue exitosa.
 	 */
-	Mono<Turno> tomarTurno(String turnoId, String usuarioId, String departamentoId);
+	Mono<TurnoDTO> tomarTurno(String turnoId, String usuarioId, String departamentoId);
 	Mono<Turno> buscarTurnoPorId(String turnoId);
 	Flux<Turno> buscarVariosTurnos(List<String> turnosIds);
 }

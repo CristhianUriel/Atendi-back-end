@@ -1,5 +1,6 @@
 package com.mx.atendi.controller;
 
+import com.mx.atendi.dto.TurnoDTO;
 import com.mx.atendi.entity.HistorialTurnos;
 import com.mx.atendi.entity.Turno;
 import com.mx.atendi.service.TurnoService;
@@ -36,7 +37,7 @@ public class TurnoController {
      */
     @PostMapping
     @Operation(summary = "Crear un nuevo turno", description = "Permite crear un nuevo turno para un hospital y departamento")
-    public Mono<Turno> crearTurno(@RequestBody Turno turno, Authentication authentication) {
+    public Mono<TurnoDTO> crearTurno(@RequestBody Turno turno, Authentication authentication) {
         String rolUsuario = authentication.getAuthorities().iterator().next().getAuthority();
 
         return turnoService.crearTurno(turno, rolUsuario)
@@ -57,7 +58,7 @@ public class TurnoController {
      */
     @PutMapping("/{turnoId}/tomar")
     @Operation(summary = "Tomar un turno", description = "Asigna un turno a un usuario dentro de su departamento")
-    public Mono<Turno> tomarTurno(@PathVariable String turnoId, Authentication authentication) {
+    public Mono<TurnoDTO> tomarTurno(@PathVariable String turnoId, Authentication authentication) {
         String usuarioId = authentication.getName();
         Map<String, String> detalles = (Map<String, String>) authentication.getDetails();
         String hospitalId = detalles.get("hospitalId");
@@ -75,7 +76,7 @@ public class TurnoController {
      */
     @PutMapping("/{turnoId}/finalizar")
     @Operation(summary = "Finalizar un turno", description = "Marca un turno como atendido o no atendido")
-    public Mono<Turno> finalizarTurno(@PathVariable String turnoId, @RequestParam String estadoFinal, Authentication authentication) {
+    public Mono<TurnoDTO> finalizarTurno(@PathVariable String turnoId, @RequestParam String estadoFinal, Authentication authentication) {
         String usuarioId = authentication.getName();
         return turnoService.finalizarTurno(turnoId, usuarioId, estadoFinal);
     }
