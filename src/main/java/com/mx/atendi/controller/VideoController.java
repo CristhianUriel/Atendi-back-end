@@ -33,6 +33,7 @@ import com.mx.atendi.repository.VideoRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -40,6 +41,7 @@ import reactor.core.publisher.Mono;
 @RequestMapping("/videos")
 @RequiredArgsConstructor
 @Tag(name = "Gestión de Videos", description = "API para manejar videos en streaming y almacenamiento")
+@Slf4j
 public class VideoController {
 
     private final VideoRepository videoRepository;
@@ -68,40 +70,58 @@ public class VideoController {
     @GetMapping(value = "/stream/all", produces = "video/mp4")
     @Operation(summary = "Reproducir todos los videos en loop", description = "Reproduce todos los videos almacenados en bucle continuo")
     public Mono<ResponseEntity<Flux<DataBuffer>>> streamAllVideos(@RequestHeader(value = "Range", required = false) String range) {
+        log.info("📡 Iniciando transmisión de videos...");
+        log.info("📜 Header Range recibido: {}", range);
+
         Flux<DataBuffer> videoStream = videoRepository.findAll()
-                .map(video -> Paths.get(videoPath, video.getNombre()))
-                .filter(Files::exists)
+                .map(video -> {
+                    Path path = Paths.get(videoPath, video.getNombre());
+                    log.info("📁 Ruta del archivo: {}", path);
+                    return path;
+                })
+                .filter(path -> {
+                    boolean exists = Files.exists(path);
+                    if (!exists) {
+                        log.warn("⚠️ Archivo no encontrado: {}", path);
+                    }
+                    return exists;
+                })
                 .flatMap(path -> {
                     try {
                         FileSystemResource resource = new FileSystemResource(path);
-                        return DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 4096);
+                        log.info("✅ Archivo encontrado, comenzando lectura: {}", path);
+                        return DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 4096)
+                                .doOnError(e -> log.error("⚠️ Error leyendo archivo: {} - {}", path, e.getMessage()));
                     } catch (Exception e) {
-                        System.err.println("❌ Error leyendo archivo: " + path + " - " + e.getMessage());
+                        log.error("❌ Excepción al acceder a archivo: {}", path, e);
                         return Flux.empty();
                     }
                 })
-                .repeatWhen(flux -> flux.delayElements(Duration.ofSeconds(2))) // 🔄 Loop con pausa para evitar saturación
+                .delayElements(Duration.ofMillis(100)) // 🔄 Evita saturación y desconexión
                 .onErrorResume(e -> {
-                    System.err.println("🚨 Error general en streaming: " + e.getMessage());
+                    log.error("🚨 Error general en streaming: {}", e.getMessage());
                     return Flux.empty();
                 });
 
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Accept-Ranges", "bytes"); // 🔥 Permite que el navegador haga peticiones parciales
+        headers.set("Accept-Ranges", "bytes");
 
         if (range != null) {
-            headers.set("Content-Range", "bytes */*"); // Simula respuesta con rango
+            headers.set("Content-Range", "bytes */*");
+            log.info("🔄 Enviando respuesta parcial con rango.");
             return Mono.just(ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
                     .headers(headers)
                     .contentType(MediaType.valueOf("video/mp4"))
                     .body(videoStream));
         }
 
+        log.info("📡 Transmisión completa iniciada.");
         return Mono.just(ResponseEntity.ok()
                 .headers(headers)
                 .contentType(MediaType.valueOf("video/mp4"))
                 .body(videoStream));
     }
+
 
 
 
