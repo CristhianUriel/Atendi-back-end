@@ -81,7 +81,7 @@ public class VideoController {
                         FileSystemResource resource = new FileSystemResource(path);
                         long fileSize = Files.size(path);
                         long rangeStart = 0;
-                        long rangeEnd = fileSize - 1;
+                        long rangeEnd = fileSize - 1; // Si no se especifica el rango, enviar todo el archivo
 
                         if (range != null && range.startsWith("bytes=")) {
                             String[] ranges = range.replace("bytes=", "").split("-");
@@ -92,31 +92,29 @@ public class VideoController {
                         }
 
                         long contentLength = rangeEnd - rangeStart + 1;
+
                         log.info("🎯 Streaming desde {} hasta {} de un total de {} bytes", rangeStart, rangeEnd, fileSize);
+
+                        Flux<DataBuffer> dataBufferFlux = DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 4096)
+                                .skip(rangeStart / 4096) // Saltar bytes si es necesario
+                                .take(contentLength / 4096 + 1); // Enviar solo la parte solicitada
 
                         HttpHeaders headers = new HttpHeaders();
                         headers.set("Accept-Ranges", "bytes");
                         headers.set("Content-Range", "bytes " + rangeStart + "-" + rangeEnd + "/" + fileSize);
                         headers.setContentLength(contentLength);
-                        headers.setContentType(MediaType.valueOf("video/mp4"));
 
                         return Mono.just(ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
                                 .headers(headers)
-                                .body(DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 8192)
-                                        .skip(rangeStart / 8192)
-                                        .take(contentLength / 8192 + 1)
-                                        .delayElements(Duration.ofMillis(10)) // 🔄 Pequeño delay para streaming más fluido
-                                ));
+                                .contentType(MediaType.valueOf("video/mp4"))
+                                .body(dataBufferFlux));
                     } catch (Exception e) {
                         log.error("❌ Error al procesar el archivo: {}", e.getMessage());
                         return Mono.empty();
                     }
                 })
-                .next(); // 🔄 Solo tomar el primer video y permitir que el cliente solicite el siguiente
+                .next();
     }
-
-
-
 
 
 
