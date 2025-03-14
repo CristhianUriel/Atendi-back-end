@@ -12,6 +12,7 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -65,35 +67,42 @@ public class VideoController {
     // 🔹 STREAMING DE TODOS LOS VIDEOS EN LOOP
     @GetMapping(value = "/stream/all", produces = "video/mp4")
     @Operation(summary = "Reproducir todos los videos en loop", description = "Reproduce todos los videos almacenados en bucle continuo")
-    public ResponseEntity<Flux<DataBuffer>> streamAllVideos() {
+    public Mono<ResponseEntity<Flux<DataBuffer>>> streamAllVideos(@RequestHeader(value = "Range", required = false) String range) {
         Flux<DataBuffer> videoStream = videoRepository.findAll()
-                .map(video -> {
-                    Path path = Paths.get(videoPath, video.getNombre());
-                    System.out.println("📁 Ruta del archivo: " + path); // 🔍 Depuración
-                    return path;
-                })
+                .map(video -> Paths.get(videoPath, video.getNombre()))
                 .filter(Files::exists)
                 .flatMap(path -> {
                     try {
                         FileSystemResource resource = new FileSystemResource(path);
-                        return DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 4096)
-                                .doOnError(e -> System.err.println("⚠️ Error leyendo archivo: " + path + " - " + e.getMessage()));
+                        return DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 4096);
                     } catch (Exception e) {
-                        System.err.println("❌ Excepción al acceder a archivo: " + path);
+                        System.err.println("❌ Error leyendo archivo: " + path + " - " + e.getMessage());
                         return Flux.empty();
                     }
                 })
-                .repeatWhen(flux -> flux.delayElements(Duration.ofSeconds(2))) // Evita saturación
-
+                .repeatWhen(flux -> flux.delayElements(Duration.ofSeconds(2))) // 🔄 Loop con pausa para evitar saturación
                 .onErrorResume(e -> {
                     System.err.println("🚨 Error general en streaming: " + e.getMessage());
                     return Flux.empty();
                 });
 
-        return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)//(MediaType.valueOf("video/mp4"))
-                .body(videoStream);
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Accept-Ranges", "bytes"); // 🔥 Permite que el navegador haga peticiones parciales
+
+        if (range != null) {
+            headers.set("Content-Range", "bytes */*"); // Simula respuesta con rango
+            return Mono.just(ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                    .headers(headers)
+                    .contentType(MediaType.valueOf("video/mp4"))
+                    .body(videoStream));
+        }
+
+        return Mono.just(ResponseEntity.ok()
+                .headers(headers)
+                .contentType(MediaType.valueOf("video/mp4"))
+                .body(videoStream));
     }
+
 
 
 
