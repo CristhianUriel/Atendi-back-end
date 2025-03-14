@@ -67,21 +67,29 @@ public class VideoController {
     }
 
     // 🔹 STREAMING DE TODOS LOS VIDEOS EN LOOP
-    @GetMapping(value = "/stream/all", produces = "video/mp4")
-    @Operation(summary = "Reproducir todos los videos en loop", description = "Reproduce todos los videos almacenados en bucle continuo")
-    public Mono<ResponseEntity<Flux<DataBuffer>>> streamAllVideos(@RequestHeader(value = "Range", required = false) String range) {
-        log.info("📡 Iniciando transmisión de videos...");
+    @GetMapping(value = "/stream/{index}", produces = "video/mp4")
+    @Operation(summary = "Reproducir video por índice", description = "Reproduce un video específico según el índice en la lista de videos")
+    public Mono<ResponseEntity<Flux<DataBuffer>>> streamVideo(@PathVariable int index, @RequestHeader(value = "Range", required = false) String range) {
+        log.info("📡 Iniciando transmisión del video en índice: {}", index);
         log.info("📜 Header Range recibido: {}", range);
 
         return videoRepository.findAll()
-                .map(video -> Paths.get(videoPath, video.getNombre()))
-                .filter(Files::exists)
-                .flatMap(path -> {
+                .collectList()
+                .flatMap(videos -> {
+                    if (videos.isEmpty() || index >= videos.size()) {
+                        return Mono.just(ResponseEntity.notFound().build());
+                    }
+
+                    Path path = Paths.get(videoPath, videos.get(index).getNombre());
+                    if (!Files.exists(path)) {
+                        return Mono.just(ResponseEntity.notFound().build());
+                    }
+
                     try {
                         FileSystemResource resource = new FileSystemResource(path);
                         long fileSize = Files.size(path);
                         long rangeStart = 0;
-                        long rangeEnd = fileSize - 1; // Si no se especifica el rango, enviar todo el archivo
+                        long rangeEnd = fileSize - 1;
 
                         if (range != null && range.startsWith("bytes=")) {
                             String[] ranges = range.replace("bytes=", "").split("-");
@@ -92,29 +100,28 @@ public class VideoController {
                         }
 
                         long contentLength = rangeEnd - rangeStart + 1;
-
                         log.info("🎯 Streaming desde {} hasta {} de un total de {} bytes", rangeStart, rangeEnd, fileSize);
-
-                        Flux<DataBuffer> dataBufferFlux = DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 4096)
-                                .skip(rangeStart / 4096) // Saltar bytes si es necesario
-                                .take(contentLength / 4096 + 1); // Enviar solo la parte solicitada
 
                         HttpHeaders headers = new HttpHeaders();
                         headers.set("Accept-Ranges", "bytes");
                         headers.set("Content-Range", "bytes " + rangeStart + "-" + rangeEnd + "/" + fileSize);
                         headers.setContentLength(contentLength);
+                        headers.setContentType(MediaType.valueOf("video/mp4"));
+
+                        Flux<DataBuffer> dataBufferFlux = DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 4096)
+                                .skip(rangeStart / 4096)
+                                .take(contentLength / 4096 + 1);
 
                         return Mono.just(ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
                                 .headers(headers)
-                                .contentType(MediaType.valueOf("video/mp4"))
                                 .body(dataBufferFlux));
                     } catch (Exception e) {
                         log.error("❌ Error al procesar el archivo: {}", e.getMessage());
                         return Mono.empty();
                     }
-                })
-                .next();
+                });
     }
+
 
 
 
