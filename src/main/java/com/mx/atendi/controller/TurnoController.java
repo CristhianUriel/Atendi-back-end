@@ -5,6 +5,9 @@ import com.mx.atendi.entity.Turno;
 import com.mx.atendi.service.TurnoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+
+import java.util.Map;
+
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -56,7 +59,9 @@ public class TurnoController {
     @Operation(summary = "Tomar un turno", description = "Asigna un turno a un usuario dentro de su departamento")
     public Mono<Turno> tomarTurno(@PathVariable String turnoId, Authentication authentication) {
         String usuarioId = authentication.getName();
-        String departamentoId = authentication.getAuthorities().iterator().next().getAuthority();
+        Map<String, String> detalles = (Map<String, String>) authentication.getDetails();
+        String hospitalId = detalles.get("hospitalId");
+        String departamentoId = detalles.get("departamentoId");
         return turnoService.tomarTurno(turnoId, usuarioId, departamentoId);
     }
 
