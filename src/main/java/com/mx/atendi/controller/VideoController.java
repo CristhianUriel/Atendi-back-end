@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -11,6 +12,7 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.multipart.FilePart;
@@ -65,22 +67,34 @@ public class VideoController {
     @Operation(summary = "Reproducir todos los videos en loop", description = "Reproduce todos los videos almacenados en bucle continuo")
     public ResponseEntity<Flux<DataBuffer>> streamAllVideos() {
         Flux<DataBuffer> videoStream = videoRepository.findAll()
-                .map(video -> Paths.get(videoPath, video.getNombre()))
-                .filter(Files::exists) // Asegurar que los archivos existen
+                .map(video -> {
+                    Path path = Paths.get(videoPath, video.getNombre());
+                    System.out.println("📁 Ruta del archivo: " + path); // 🔍 Depuración
+                    return path;
+                })
+                .filter(Files::exists)
                 .flatMap(path -> {
                     try {
                         FileSystemResource resource = new FileSystemResource(path);
-                        return DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 4096);
+                        return DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 4096)
+                                .doOnError(e -> System.err.println("⚠️ Error leyendo archivo: " + path + " - " + e.getMessage()));
                     } catch (Exception e) {
+                        System.err.println("❌ Excepción al acceder a archivo: " + path);
                         return Flux.empty();
                     }
                 })
-                .repeat(); // 🔥 Loop infinito
+                .repeatWhen(flux -> flux.delayElements(Duration.ofSeconds(2))) // Evita saturación
+
+                .onErrorResume(e -> {
+                    System.err.println("🚨 Error general en streaming: " + e.getMessage());
+                    return Flux.empty();
+                });
 
         return ResponseEntity.ok()
-                .contentType(MediaType.valueOf("video/mp4"))  // 🔥 Cambiamos de OCTET_STREAM a video/mp4
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)//(MediaType.valueOf("video/mp4"))
                 .body(videoStream);
     }
+
 
 
     // 🔹 LISTAR NOMBRES DE LOS VIDEOS
@@ -95,13 +109,23 @@ public class VideoController {
     @Operation(summary = "Eliminar un video", description = "Borra un video almacenado por su nombre, requiere autenticación")
     public Mono<ResponseEntity<String>> deleteVideo(@PathVariable String videoName, Authentication authentication) {
         Path filePath = Paths.get(videoPath, videoName);
+
         return Mono.fromSupplier(() -> {
             try {
-                Files.deleteIfExists(filePath);
-                return ResponseEntity.ok("Video eliminado correctamente por " + authentication.getName());
+                boolean fileDeleted = Files.deleteIfExists(filePath);
+                return fileDeleted; // true si el archivo se eliminó, false si no existía
             } catch (IOException e) {
-                return ResponseEntity.status(500).body("Error eliminando el video");
+                throw new RuntimeException("Error eliminando el archivo", e);
             }
-        });
+        })
+        .flatMap(fileDeleted -> {
+            if (fileDeleted) {
+                return videoRepository.deleteByNombre(videoName) // Asume que tienes un método deleteByNombre en tu repositorio
+                    .thenReturn(ResponseEntity.ok("Video eliminado correctamente por " + authentication.getName()));
+            } else {
+                return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND).body("Video no encontrado"));
+            }
+        })
+        .onErrorResume(e -> Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error eliminando el video: " + e.getMessage())));
     }
 }
