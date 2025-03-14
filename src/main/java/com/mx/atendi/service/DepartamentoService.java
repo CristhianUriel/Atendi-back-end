@@ -137,6 +137,7 @@ public class DepartamentoService implements IDepartamentoService {
     
     @Override
     public Mono<String> obtenerNombrePorId(String departamentoId) {
+    	log.info("departamentoId [{}]",departamentoId);
         return departamentoRepository.findById(departamentoId)
                 .map(Departamento::getNombre)
                 .switchIfEmpty(Mono.just("Desconocido"));

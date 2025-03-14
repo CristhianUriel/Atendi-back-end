@@ -160,30 +160,17 @@ public class TurnoService implements ITurnoService {
     }
 
     private String generarSiguienteNumero(String ultimo) {
-        String letras = ultimo.replaceAll("[0-9]", "");
-        int numeros = Integer.parseInt(ultimo.replaceAll("[^0-9]", ""));
+        int numero = Integer.parseInt(ultimo.replaceAll("[^0-9]", "")); // Extraer números
+        numero++; // Incrementar número
 
-        if (numeros == 999) {
-            letras = siguienteLetra(letras);
-            numeros = 1;
-        } else {
-            numeros++;
-        }
+        String nuevaLetra = obtenerLetraPorNumero(numero); // Asignar letra basada en el número
 
-        return letras + String.format("%03d", numeros);
+        return nuevaLetra + String.format("%03d", numero);
     }
 
-    private String siguienteLetra(String letras) {
-        if (letras.isEmpty()) return "A";
-        char[] chars = letras.toCharArray();
-        for (int i = chars.length - 1; i >= 0; i--) {
-            if (chars[i] < 'Z') {
-                chars[i]++;
-                return new String(chars);
-            }
-            chars[i] = 'A';
-        }
-        return "A" + new String(chars);
+    private String obtenerLetraPorNumero(int numero) {
+        int index = (numero - 1) % 26; // Cicla entre 0 y 25 (A-Z)
+        return String.valueOf((char) ('A' + index)); // Convierte el índice a una letra (A-Z)
     }
 
     /**
@@ -237,6 +224,7 @@ public class TurnoService implements ITurnoService {
     // Método para buscar un turno por su ID
     @Override
     public Mono<Turno> buscarTurnoPorId(String turnoId) {
+    	log.info("buscarTurnoPorId [{}]",turnoId);
         return turnoRepository.findById(turnoId)
                 .switchIfEmpty(Mono.error(new RuntimeException("Turno no encontrado: " + turnoId)));
     }
