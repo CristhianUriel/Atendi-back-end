@@ -6,6 +6,11 @@ import com.mx.atendi.service.ITurnoService;
 import com.mx.atendi.service.TurnoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
@@ -16,32 +21,49 @@ import java.util.List;
 @Tag(name = "Impresión", description = "Servicio para imprimir tickets de turnos")
 public class ImpresionController {
 
-    private final IImpresionService impresionService;
-    private final ITurnoService turnoService;
+	private final IImpresionService impresionService;
+	private final ITurnoService turnoService;
 
-    public ImpresionController(IImpresionService impresionService, TurnoService turnoService) {
-        this.impresionService = impresionService;
-        this.turnoService = turnoService;
+	public ImpresionController(IImpresionService impresionService, TurnoService turnoService) {
+		this.impresionService = impresionService;
+		this.turnoService = turnoService;
+	}
+
+	// 🔹 POST con RequestBody en lugar de PathVariable y RequestParam
+	@PostMapping("/tickets")
+    @Operation(summary = "Imprimir uno o varios tickets de turno")
+    public Mono<ResponseEntity<String>> imprimirTicket(@RequestBody TicketRequest request) {
+        // 🔹 Si se envió un solo turno
+        if (request.getTurnoId() != null) {
+            return turnoService.buscarTurnoPorId(request.getTurnoId())
+                    .flatMap(turno -> impresionService.imprimirTicket(turno, request.getImpresora()))
+                    .map(resultado -> ResponseEntity.ok().body(resultado))
+                    .defaultIfEmpty(ResponseEntity.badRequest().body("❌ No se encontró el turno."));
+        }
+
+        // 🔹 Si se envió una lista de turnos
+        if (request.getTurnosIds() != null && !request.getTurnosIds().isEmpty()) {
+            return turnoService.buscarVariosTurnos(request.getTurnosIds()).collectList()
+                    .flatMap(turnos -> impresionService.imprimirVariosTickets(turnos, request.getImpresora()))
+                    .map(resultado -> ResponseEntity.ok().body(resultado))
+                    .defaultIfEmpty(ResponseEntity.badRequest().body("❌ No se encontraron turnos válidos."));
+        }
+
+        // 🔹 Si no se envió nada válido
+        return Mono.just(ResponseEntity.badRequest().body("❌ Debes proporcionar un turnoId o una lista de turnosIds."));
     }
 
-    @GetMapping("/ticket/{turnoId}")
-    @Operation(summary = "Imprimir ticket de turno")
-    public Mono<String> imprimirTicket(@PathVariable String turnoId, @RequestParam(required = false) String impresora) {
-        return turnoService.buscarTurnoPorId(turnoId)
-                .flatMap(turno -> impresionService.imprimirTicket(turno, impresora));
-    }
+	// 🔹 Clase interna para manejar la estructura del RequestBody
+	@Data
+	public static class TicketRequest {
+		 private String turnoId;      // Para un solo ticket
+	        private List<String> turnosIds; // Para múltiples tickets
+	        private String impresora;
+	}
 
-    @PostMapping("/tickets")
-    @Operation(summary = "Imprimir múltiples tickets")
-    public Mono<String> imprimirVariosTickets(@RequestBody List<String> turnosIds, @RequestParam(required = false) String impresora) {
-        return turnoService.buscarVariosTurnos(turnosIds)
-                .collectList()
-                .flatMap(turnos -> impresionService.imprimirVariosTickets(turnos, impresora));
-    }
-    
-    @GetMapping("/impresoras")
-    @Operation(summary = "Listar impresoras disponibles")
-    public Mono<List<String>> listarImpresorasDisponibles() {
-        return impresionService.listarImpresorasDisponibles();
-    }
+	@GetMapping("/impresoras")
+	@Operation(summary = "Listar impresoras disponibles")
+	public Mono<List<String>> listarImpresorasDisponibles() {
+		return impresionService.listarImpresorasDisponibles();
+	}
 }

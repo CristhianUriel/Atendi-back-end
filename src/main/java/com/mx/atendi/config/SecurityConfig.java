@@ -51,6 +51,8 @@ public class SecurityConfig {
 						.pathMatchers(HttpMethod.GET, "/api/usuarios/**").permitAll()// .hasRole("ADMIN") // 🔒 Solo
 																						// ADMIN puede crear usuarios
 						.pathMatchers("/api/turnos/stream/**").permitAll()
+						.pathMatchers(HttpMethod.GET,"/videos/**").permitAll() // Permitir ver videos sin autenticación
+	                    .pathMatchers("/videos/upload", "/videos/delete/**").authenticated() // Requiere JWT
 						.anyExchange().authenticated() // 🔒 Todo
 																												// lo
 																												// demás
