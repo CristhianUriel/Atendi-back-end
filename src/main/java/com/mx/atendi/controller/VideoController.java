@@ -73,53 +73,47 @@ public class VideoController {
         log.info("📡 Iniciando transmisión de videos...");
         log.info("📜 Header Range recibido: {}", range);
 
-        Flux<DataBuffer> videoStream = videoRepository.findAll()
-                .map(video -> {
-                    Path path = Paths.get(videoPath, video.getNombre());
-                    log.info("📁 Ruta del archivo: {}", path);
-                    return path;
-                })
-                .filter(path -> {
-                    boolean exists = Files.exists(path);
-                    if (!exists) {
-                        log.warn("⚠️ Archivo no encontrado: {}", path);
-                    }
-                    return exists;
-                })
+        return videoRepository.findAll()
+                .map(video -> Paths.get(videoPath, video.getNombre()))
+                .filter(Files::exists)
                 .flatMap(path -> {
                     try {
                         FileSystemResource resource = new FileSystemResource(path);
-                        log.info("✅ Archivo encontrado, comenzando lectura: {}", path);
-                        return DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 4096)
-                                .doOnError(e -> log.error("⚠️ Error leyendo archivo: {} - {}", path, e.getMessage()));
+                        long fileSize = Files.size(path);
+                        long rangeStart = 0;
+                        long rangeEnd = fileSize - 1; // Si no se especifica el rango, enviar todo el archivo
+
+                        if (range != null && range.startsWith("bytes=")) {
+                            String[] ranges = range.replace("bytes=", "").split("-");
+                            rangeStart = Long.parseLong(ranges[0]);
+                            if (ranges.length > 1 && !ranges[1].isEmpty()) {
+                                rangeEnd = Long.parseLong(ranges[1]);
+                            }
+                        }
+
+                        long contentLength = rangeEnd - rangeStart + 1;
+
+                        log.info("🎯 Streaming desde {} hasta {} de un total de {} bytes", rangeStart, rangeEnd, fileSize);
+
+                        Flux<DataBuffer> dataBufferFlux = DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 4096)
+                                .skip(rangeStart / 4096) // Saltar bytes si es necesario
+                                .take(contentLength / 4096 + 1); // Enviar solo la parte solicitada
+
+                        HttpHeaders headers = new HttpHeaders();
+                        headers.set("Accept-Ranges", "bytes");
+                        headers.set("Content-Range", "bytes " + rangeStart + "-" + rangeEnd + "/" + fileSize);
+                        headers.setContentLength(contentLength);
+
+                        return Mono.just(ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                                .headers(headers)
+                                .contentType(MediaType.valueOf("video/mp4"))
+                                .body(dataBufferFlux));
                     } catch (Exception e) {
-                        log.error("❌ Excepción al acceder a archivo: {}", path, e);
-                        return Flux.empty();
+                        log.error("❌ Error al procesar el archivo: {}", e.getMessage());
+                        return Mono.empty();
                     }
                 })
-                .delayElements(Duration.ofMillis(100)) // 🔄 Evita saturación y desconexión
-                .onErrorResume(e -> {
-                    log.error("🚨 Error general en streaming: {}", e.getMessage());
-                    return Flux.empty();
-                });
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("Accept-Ranges", "bytes");
-
-        if (range != null) {
-            headers.set("Content-Range", "bytes */*");
-            log.info("🔄 Enviando respuesta parcial con rango.");
-            return Mono.just(ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                    .headers(headers)
-                    .contentType(MediaType.valueOf("video/mp4"))
-                    .body(videoStream));
-        }
-
-        log.info("📡 Transmisión completa iniciada.");
-        return Mono.just(ResponseEntity.ok()
-                .headers(headers)
-                .contentType(MediaType.valueOf("video/mp4"))
-                .body(videoStream));
+                .next();
     }
 
 
