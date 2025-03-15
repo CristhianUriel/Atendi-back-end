@@ -81,9 +81,16 @@ public class TurnoService implements ITurnoService {
                     return turnoRepository.save(turno)
                             .flatMap(savedTurno -> operacionRepository.findById(savedTurno.getTipoOperacion())
                                     .map(operacion -> {
-                                        TurnoDTO turnoDTO = convertirADTO(savedTurno, operacion.getNombre());
-                                        sink.tryEmitNext(turnoDTO);
-                                        log.info("Turno tomado por usuario {}: {}", usuarioId, turnoDTO);
+                                    	TurnoDTO turnoDTO = convertirADTO(savedTurno, operacion.getNombre());
+                                        sink.tryEmitNext(turnoDTO); // 🔥 Emitir para actualizar WebSocket
+
+                                        // 🔥 Emitir turno eliminado para los clientes
+                                        TurnoDTO eliminado = new TurnoDTO();
+                                        eliminado.setId(turnoId);
+                                        eliminado.setEstado("eliminado");
+                                        sink.tryEmitNext(eliminado);
+
+                                        log.info("✅ Turno tomado por usuario {}: {}", usuarioId, turnoDTO);
                                         return turnoDTO;
                                     }));
                 });
@@ -117,7 +124,7 @@ public class TurnoService implements ITurnoService {
                 .filter(turno -> turno.getHospitalId().equals(hospitalId) && turno.getEstado().equals("pendiente")
                         && (esMonitor || turno.getDepartamentoId().equals(departamentoId)));
 
-        return Flux.merge(turnosPendientes, turnosNuevos).distinct(TurnoDTO::getId);
+        return Flux.merge(turnosPendientes, turnosNuevos).filter(turno -> turno.getEstado().equals("pendiente")).distinct(TurnoDTO::getId);
     }
 
 
@@ -154,7 +161,15 @@ public class TurnoService implements ITurnoService {
                     return historialTurnosRepository.save(historial)
                             .then(turnoRepository.delete(turno))
                             .then(operacionRepository.findById(turno.getTipoOperacion())
-                                    .map(operacion -> convertirADTO(turno, operacion.getNombre())));
+                                    .map(operacion -> {
+                                        // 🔥 Emitir evento de eliminación del turno
+                                        TurnoDTO eliminado = new TurnoDTO();
+                                        eliminado.setId(turnoId);
+                                        eliminado.setEstado("eliminado");
+                                        sink.tryEmitNext(eliminado);
+
+                                        return convertirADTO(turno, operacion.getNombre());
+                                    }));
                 });
     }
 
