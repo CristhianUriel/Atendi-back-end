@@ -105,7 +105,7 @@ public class TurnoController {
     }
     
     @GetMapping(value = "/tomados/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<TurnoDTO> streamTurnosTomados(Authentication authentication) {
+    public Flux<TurnoDTO> streamTurnosTomados() {
         return turnoEmitter.getFlux(); // 🔥 Devuelve un flujo continuo de turnos tomados
     }
 }
