@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -44,118 +45,125 @@ import reactor.core.publisher.Mono;
 @Slf4j
 public class VideoController {
 
-    private final VideoRepository videoRepository;
+	private final VideoRepository videoRepository;
 
-    @Value("${app.video-path}")
-    private String videoPath;
+	@Value("${app.video-path}")
+	private String videoPath;
 
-    // 🔹 SUBIR VIDEO Y GUARDAR METADATA
-    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Subir un video", description = "Permite subir un video y guardar su metadata en MongoDB")
-    public Mono<ResponseEntity<String>> uploadVideo(@RequestPart("file") Mono<FilePart> filePartMono, Authentication authentication) {
-        return filePartMono.flatMap(filePart -> {
-            Path destination = Paths.get(videoPath, filePart.filename());
-            return filePart.transferTo(destination)
-                    .then(videoRepository.save(new Video(
-                            null,
-                            filePart.filename(),
-                            destination.toString(),
-                            LocalDateTime.now()
-                    )))
-                    .thenReturn(ResponseEntity.ok("Video subido correctamente por " + authentication.getName()));
-        });
-    }
+	// 🔹 SUBIR VIDEO Y GUARDAR METADATA
+	@PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	@Operation(summary = "Subir un video", description = "Permite subir un video y guardar su metadata en MongoDB")
+	public Mono<ResponseEntity<String>> uploadVideo(@RequestPart("file") Mono<FilePart> filePartMono,
+			Authentication authentication) {
+		return filePartMono.flatMap(filePart -> {
+			Path destination = Paths.get(videoPath, filePart.filename());
+			return filePart.transferTo(destination)
+					.then(videoRepository
+							.save(new Video(null, filePart.filename(), destination.toString(), LocalDateTime.now())))
+					.thenReturn(ResponseEntity.ok("Video subido correctamente por " + authentication.getName()));
+		});
+	}
 
-    // 🔹 STREAMING DE TODOS LOS VIDEOS EN LOOP
-    @GetMapping(value = "/stream/{index}", produces = "video/mp4")
-    @Operation(summary = "Reproducir video por índice", description = "Reproduce un video específico según el índice en la lista de videos")
-    public Mono<ResponseEntity<Flux<DataBuffer>>> streamVideo(@PathVariable int index, @RequestHeader(value = "Range", required = false) String range) {
-        log.info("📡 Iniciando transmisión del video en índice: {}", index);
-        log.info("📜 Header Range recibido: {}", range);
+	// 🔹 STREAMING DE TODOS LOS VIDEOS EN LOOP
+	@GetMapping(value = "/stream/{index}", produces = "video/mp4")
+	@Operation(summary = "Reproducir video por índice", description = "Reproduce un video específico según el índice en la lista de videos en loop")
+	public Mono<ResponseEntity<Flux<DataBuffer>>> streamVideo(@PathVariable int index,
+			@RequestHeader(value = "Range", required = false) String range) {
 
-        return videoRepository.findAll()
-                .collectList()
-                .flatMap(videos -> {
-                    if (videos.isEmpty() || index >= videos.size()) {
-                        return Mono.just(ResponseEntity.notFound().build());
-                    }
+		log.info("📡 Iniciando transmisión del video en índice: {}", index);
+		log.info("📜 Header Range recibido: {}", range);
 
-                    Path path = Paths.get(videoPath, videos.get(index).getNombre());
-                    if (!Files.exists(path)) {
-                        return Mono.just(ResponseEntity.notFound().build());
-                    }
+		return videoRepository.findAll().collectList().flatMap(videos -> {
+			if (videos.isEmpty()) {
+				log.warn("⚠️ No hay videos disponibles.");
+				return Mono.just(ResponseEntity.notFound().build());
+			}
 
-                    try {
-                        FileSystemResource resource = new FileSystemResource(path);
-                        long fileSize = Files.size(path);
-                        long rangeStart = 0;
-                        long rangeEnd = fileSize - 1;
+			int adjustedIndex = index % videos.size();
+			log.info("🔄 Ajustando índice: {} -> {}", index, adjustedIndex);
 
-                        if (range != null && range.startsWith("bytes=")) {
-                            String[] ranges = range.replace("bytes=", "").split("-");
-                            rangeStart = Long.parseLong(ranges[0]);
-                            if (ranges.length > 1 && !ranges[1].isEmpty()) {
-                                rangeEnd = Long.parseLong(ranges[1]);
-                            }
-                        }
+			Path path = Paths.get(videoPath, videos.get(adjustedIndex).getNombre());
+			if (!Files.exists(path)) {
+				log.error("❌ Archivo no encontrado: {}", path);
+				return Mono.just(ResponseEntity.notFound().build());
+			}
 
-                        long contentLength = rangeEnd - rangeStart + 1;
-                        log.info("🎯 Streaming desde {} hasta {} de un total de {} bytes", rangeStart, rangeEnd, fileSize);
+			try {
+				FileSystemResource resource = new FileSystemResource(path);
+				long fileSize = Files.size(path);
+				long rangeStart = 0;
+				long rangeEnd = fileSize - 1;
 
-                        HttpHeaders headers = new HttpHeaders();
-                        headers.set("Accept-Ranges", "bytes");
-                        headers.set("Content-Range", "bytes " + rangeStart + "-" + rangeEnd + "/" + fileSize);
-                        headers.setContentLength(contentLength);
-                        headers.setContentType(MediaType.valueOf("video/mp4"));
+				if (range != null && range.startsWith("bytes=")) {
+					String[] ranges = range.replace("bytes=", "").split("-");
+					try {
+						rangeStart = Long.parseLong(ranges[0]);
+						rangeEnd = (ranges.length > 1 && !ranges[1].isEmpty()) ? Long.parseLong(ranges[1])
+								: fileSize - 1;
 
-                        Flux<DataBuffer> dataBufferFlux = DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 4096)
-                                .skip(rangeStart / 4096)
-                                .take(contentLength / 4096 + 1);
+						if (rangeStart < 0 || rangeStart >= fileSize) {
+							log.warn("⚠️ Rango '{}' inválido. Devolviendo 416.", range);
+							return Mono.just(ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE).build());
+						}
+						if (rangeEnd >= fileSize)
+							rangeEnd = fileSize - 1;
+					} catch (NumberFormatException e) {
+						log.error("❌ Error en el header Range '{}': {}", range, e.getMessage());
+						return Mono.just(ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE).build());
+					}
+				}
 
-                        return Mono.just(ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
-                                .headers(headers)
-                                .body(dataBufferFlux));
-                    } catch (Exception e) {
-                        log.error("❌ Error al procesar el archivo: {}", e.getMessage());
-                        return Mono.empty();
-                    }
-                });
-    }
+				long contentLength = rangeEnd - rangeStart + 1;
+				HttpHeaders headers = new HttpHeaders();
+				headers.set("Accept-Ranges", "bytes");
+				headers.set("Content-Type", "video/mp4");
+				headers.set("Content-Length", String.valueOf(contentLength));
+				headers.set("Content-Range", "bytes " + rangeStart + "-" + rangeEnd + "/" + fileSize);
 
+				Flux<DataBuffer> dataBufferFlux = DataBufferUtils.read(resource, new DefaultDataBufferFactory(), 4096)
+						.skip(rangeStart / 4096).take((contentLength + 4095) / 4096).doOnNext(DataBufferUtils::release)
+						.doOnComplete(() -> log.debug("✅ Streaming finalizado correctamente para '{}'",
+								videos.get(adjustedIndex).getNombre()));
 
+				return Mono
+						.just(ResponseEntity.status(HttpStatus.PARTIAL_CONTENT).headers(headers).body(dataBufferFlux));
 
+			} catch (IOException e) {
+				log.error("❌ Error procesando el archivo '{}': {}", path, e.getMessage());
+				return Mono.empty();
+			}
+		});
+	}
 
+	// 🔹 LISTAR NOMBRES DE LOS VIDEOS
+	@GetMapping("/names")
+	@Operation(summary = "Obtener nombres de videos", description = "Devuelve una lista de los nombres de los videos almacenados")
+	public Flux<String> getVideoNames() {
+		return videoRepository.findAll().map(Video::getNombre);
+	}
 
+	// 🔹 ELIMINAR VIDEO
+	@DeleteMapping("/{videoName}")
+	@Operation(summary = "Eliminar un video", description = "Borra un video almacenado por su nombre, requiere autenticación")
+	public Mono<ResponseEntity<String>> deleteVideo(@PathVariable String videoName, Authentication authentication) {
+		Path filePath = Paths.get(videoPath, videoName);
 
-    // 🔹 LISTAR NOMBRES DE LOS VIDEOS
-    @GetMapping("/names")
-    @Operation(summary = "Obtener nombres de videos", description = "Devuelve una lista de los nombres de los videos almacenados")
-    public Flux<String> getVideoNames() {
-        return videoRepository.findAll().map(Video::getNombre);
-    }
-
-    // 🔹 ELIMINAR VIDEO
-    @DeleteMapping("/{videoName}")
-    @Operation(summary = "Eliminar un video", description = "Borra un video almacenado por su nombre, requiere autenticación")
-    public Mono<ResponseEntity<String>> deleteVideo(@PathVariable String videoName, Authentication authentication) {
-        Path filePath = Paths.get(videoPath, videoName);
-
-        return Mono.fromSupplier(() -> {
-            try {
-                boolean fileDeleted = Files.deleteIfExists(filePath);
-                return fileDeleted; // true si el archivo se eliminó, false si no existía
-            } catch (IOException e) {
-                throw new RuntimeException("Error eliminando el archivo", e);
-            }
-        })
-        .flatMap(fileDeleted -> {
-            if (fileDeleted) {
-                return videoRepository.deleteByNombre(videoName) // Asume que tienes un método deleteByNombre en tu repositorio
-                    .thenReturn(ResponseEntity.ok("Video eliminado correctamente por " + authentication.getName()));
-            } else {
-                return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND).body("Video no encontrado"));
-            }
-        })
-        .onErrorResume(e -> Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error eliminando el video: " + e.getMessage())));
-    }
+		return Mono.fromSupplier(() -> {
+			try {
+				boolean fileDeleted = Files.deleteIfExists(filePath);
+				return fileDeleted; // true si el archivo se eliminó, false si no existía
+			} catch (IOException e) {
+				throw new RuntimeException("Error eliminando el archivo", e);
+			}
+		}).flatMap(fileDeleted -> {
+			if (fileDeleted) {
+				return videoRepository.deleteByNombre(videoName) // Asume que tienes un método deleteByNombre en tu
+																	// repositorio
+						.thenReturn(ResponseEntity.ok("Video eliminado correctamente por " + authentication.getName()));
+			} else {
+				return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND).body("Video no encontrado"));
+			}
+		}).onErrorResume(e -> Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+				.body("Error eliminando el video: " + e.getMessage())));
+	}
 }
