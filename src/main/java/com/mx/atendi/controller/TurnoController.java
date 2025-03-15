@@ -4,11 +4,14 @@ import com.mx.atendi.dto.TurnoDTO;
 import com.mx.atendi.entity.HistorialTurnos;
 import com.mx.atendi.entity.Turno;
 import com.mx.atendi.service.TurnoService;
+import com.mx.atendi.websocket.TurnoEmitter;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.util.Map;
 
+import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -20,9 +23,11 @@ import reactor.core.publisher.Mono;
 public class TurnoController {
 
     private final TurnoService turnoService;
-
-    public TurnoController(TurnoService turnoService) {
+    private final TurnoEmitter turnoEmitter;
+    
+    public TurnoController(TurnoService turnoService, TurnoEmitter turnoEmitter) {
         this.turnoService = turnoService;
+        this.turnoEmitter = turnoEmitter;
     }
     
     /**
@@ -63,8 +68,13 @@ public class TurnoController {
         Map<String, String> detalles = (Map<String, String>) authentication.getDetails();
         String hospitalId = detalles.get("hospitalId");
         String departamentoId = detalles.get("departamentoId");
-        return turnoService.tomarTurno(turnoId, usuarioId, departamentoId);
+
+        return turnoService.tomarTurno(turnoId, usuarioId, departamentoId)
+                .doOnNext(turno -> {
+                    turnoEmitter.emitirTurno(turno); // 🔥 Emitir al WebSocket y al nuevo endpoint SSE
+                });
     }
+
 
     /**
      * Finaliza un turno, marcándolo como atendido o no atendido.
@@ -92,5 +102,10 @@ public class TurnoController {
     @Operation(summary = "Últimos turnos atendidos", description = "Devuelve una lista de los últimos turnos finalizados en el hospital")
     public Flux<HistorialTurnos> obtenerTurnosUltimosAtendidos(@PathVariable String hospitalId, @PathVariable int cantidad) {
         return turnoService.obtenerTurnosUltimosAtendidos(hospitalId, cantidad);
+    }
+    
+    @GetMapping(value = "/tomados/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<TurnoDTO> streamTurnosTomados(Authentication authentication) {
+        return turnoEmitter.getFlux(); // 🔥 Devuelve un flujo continuo de turnos tomados
     }
 }
