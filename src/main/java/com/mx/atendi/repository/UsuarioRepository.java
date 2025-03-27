@@ -5,6 +5,8 @@ import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import com.mx.atendi.entity.Usuario;
 
 import reactor.core.publisher.Mono;
+import java.util.List;
+
 
 /**
  * Repositorio reactivo para la entidad Usuario.
@@ -12,4 +14,5 @@ import reactor.core.publisher.Mono;
 public interface UsuarioRepository extends ReactiveMongoRepository<Usuario, String> {
 	   // Agregar este método para buscar el usuario por userName y hospitalId
     Mono<Usuario> findByUserNameAndHospitalId(String userName, String hospitalId);
+    Mono<Usuario> findByUserName(String userName);
 }

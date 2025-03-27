@@ -12,10 +12,14 @@ import com.mx.atendi.dto.TurnoDTO;
 import com.mx.atendi.entity.ContadorTurnos;
 import com.mx.atendi.entity.HistorialTurnos;
 import com.mx.atendi.entity.Turno;
+import com.mx.atendi.entity.VentanillaCatalogo;
 import com.mx.atendi.repository.ContadorTurnosRepository;
 import com.mx.atendi.repository.HistorialTurnosRepository;
 import com.mx.atendi.repository.OperacionRepository;
 import com.mx.atendi.repository.TurnoRepository;
+import com.mx.atendi.repository.UsuarioRepository;
+import com.mx.atendi.repository.VentanillaCatalogoRepository;
+import com.mx.atendi.utils.EstatusTurno;
 
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -30,14 +34,18 @@ public class TurnoService implements ITurnoService {
     private final ContadorTurnosRepository contadorTurnosRepository;
     private final HistorialTurnosRepository historialTurnosRepository;
     private final OperacionRepository operacionRepository;
+    private final UsuarioRepository usuarioRepository;
+    private final VentanillaCatalogoRepository ventanillaCatalogoRepository; 
     private final Sinks.Many<TurnoDTO> sink;
 
     public TurnoService(TurnoRepository turnoRepository, ContadorTurnosRepository contadorTurnosRepository,
-                        HistorialTurnosRepository historialTurnosRepository, OperacionRepository operacionRepository) {
+                        HistorialTurnosRepository historialTurnosRepository, OperacionRepository operacionRepository,VentanillaCatalogoRepository ventanillaCatalogoRepository,UsuarioRepository usuarioRepository) {
         this.turnoRepository = turnoRepository;
         this.contadorTurnosRepository = contadorTurnosRepository;
         this.historialTurnosRepository = historialTurnosRepository;
         this.operacionRepository = operacionRepository;
+        this.ventanillaCatalogoRepository = ventanillaCatalogoRepository;
+        this.usuarioRepository = usuarioRepository;
         this.sink = Sinks.many().replay().limit(100);
     }
 
@@ -48,7 +56,7 @@ public class TurnoService implements ITurnoService {
         }
 
         turno.setHoraCreacion(LocalDateTime.now());
-        turno.setEstado("pendiente");
+        turno.setEstado(EstatusTurno.PENDIENTE.getValor());
 
         return generarNumeroTurno(turno.getHospitalId(), turno.getDepartamentoId())
                 .flatMap(numeroTurno -> {
@@ -67,6 +75,7 @@ public class TurnoService implements ITurnoService {
     @Override
     public Mono<TurnoDTO> tomarTurno(String turnoId, String usuarioId, String departamentoId) {
         return turnoRepository.findById(turnoId)
+        		.switchIfEmpty(Mono.error(new RuntimeException("Turno no encontrado")))
                 .flatMap(turno -> {
                     if (!turno.getDepartamentoId().equals(departamentoId)) {
                         return Mono.error(new RuntimeException("No puedes tomar turnos de otro departamento"));
@@ -76,27 +85,38 @@ public class TurnoService implements ITurnoService {
                     }
 
                     turno.setAtendidoPor(usuarioId);
-                    turno.setEstado("en proceso");
+                    turno.setEstado(EstatusTurno.EN_PROCESO.getValor());
                     turno.setHoraAtencion(LocalDateTime.now());
 
                     return turnoRepository.save(turno)
-                            .flatMap(savedTurno -> operacionRepository.findById(savedTurno.getTipoOperacion())
-                                    .map(operacion -> {
-                                    	TurnoDTO turnoDTO = convertirADTO(savedTurno, operacion.getNombre());
-                                        sink.tryEmitNext(turnoDTO); // 🔥 Emitir para actualizar WebSocket
-                                        
-                                        // 🔥 Emitir turno eliminado para los clientes
-                                        TurnoDTO eliminado = new TurnoDTO();
-                                        eliminado.setHospitalId(turnoDTO.getHospitalId());
-                                        eliminado.setDepartamentoId(turnoDTO.getHospitalId());
-                                        eliminado.setId(turnoId);
-                                        eliminado.setEstado("eliminado");
-                                        sink.tryEmitNext(eliminado);
-                                        log.info("Turno eliminado y emitido: {}", eliminado);
-                                        log.info("✅ Turno tomado por usuario {}: {}", usuarioId, turnoDTO);
-                                        
-                                        return turnoDTO;
-                                    }));
+                            .flatMap(savedTurno ->
+                                Mono.zip(
+                                    operacionRepository.findById(savedTurno.getTipoOperacion()),
+                                    obtenerVentanillaPorUsuario(usuarioId)
+                                ).map(tuple -> {
+                                    var operacion = tuple.getT1();
+                                    var ventanilla = tuple.getT2();
+
+                                    // Nuevo método convertirADTO que recibe operación y ventanilla
+                                    TurnoDTO turnoDTO = convertirADTO(savedTurno, operacion.getNombre(), ventanilla.getNombre());
+
+                                    // Emitir DTO actualizado
+                                    sink.tryEmitNext(turnoDTO);
+
+                                    // Emitir eliminado (visual)
+                                    TurnoDTO eliminado = new TurnoDTO();
+                                    eliminado.setHospitalId(turnoDTO.getHospitalId());
+                                    eliminado.setDepartamentoId(turnoDTO.getDepartamentoId());
+                                    eliminado.setId(turnoId);
+                                    eliminado.setEstado(EstatusTurno.ELIMINADO.getValor());
+                                    sink.tryEmitNext(eliminado);
+
+                                    log.info("✅ Turno tomado por usuario {}: {}", usuarioId, turnoDTO);
+                                    log.info("🗑️ Turno eliminado y emitido: {}", eliminado);
+
+                                    return turnoDTO;
+                                })
+                            );
                 });
     }
 
@@ -125,8 +145,8 @@ public class TurnoService implements ITurnoService {
         );
 
         Flux<TurnoDTO> turnosNuevos = sink.asFlux()
-                .filter(turno -> Objects.equals(turno.getHospitalId(), hospitalId) 
-                        && (esMonitor || turno.getDepartamentoId().equals(departamentoId)));
+        		.filter(turno -> Objects.equals(turno.getHospitalId(), hospitalId)
+        		        && (esMonitor || Objects.equals(turno.getDepartamentoId(), departamentoId)));
 
         return Flux.merge(turnosPendientes, turnosNuevos).filter(turno -> turno.getEstado().equals("pendiente") || turno.getEstado().equals("eliminado"));
     }
@@ -169,7 +189,7 @@ public class TurnoService implements ITurnoService {
                                         // 🔥 Emitir evento de eliminación del turno
                                         TurnoDTO eliminado = new TurnoDTO();
                                         eliminado.setId(turnoId);
-                                        eliminado.setEstado("eliminado");
+                                        eliminado.setEstado(EstatusTurno.ELIMINADO.getValor());
                                         sink.tryEmitNext(eliminado);
 
                                         return convertirADTO(turno, operacion.getNombre());
@@ -204,6 +224,26 @@ public class TurnoService implements ITurnoService {
                 turno.getHoraAtencion()
         );
     }
+    private TurnoDTO convertirADTO(Turno turno, String tipoOperacionNombre,String nombreVentanilla) {
+        return new TurnoDTO(
+                turno.getId(),
+                turno.getNumeroTurno(),
+                turno.getHospitalId(),
+                turno.getDepartamentoId(),
+                turno.getTipoOperacion(),
+                tipoOperacionNombre,
+                nombreVentanilla,
+                turno.getEstado(),
+                turno.getHoraCreacion(),
+                turno.getHoraAtencion()
+        );
+    }
+    
+    private Mono<VentanillaCatalogo> obtenerVentanillaPorUsuario(String usuarioId) {
+        return usuarioRepository.findByUserName(usuarioId)
+                   .flatMap(usuario -> ventanillaCatalogoRepository.findById(usuario.getVentanillaId()));
+    }
+
     
     private Mono<String> generarNumeroTurno(String hospitalId, String departamentoId) {
         LocalDate hoy = LocalDate.now();
