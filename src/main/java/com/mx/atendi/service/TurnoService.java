@@ -37,7 +37,7 @@ public class TurnoService implements ITurnoService {
         this.contadorTurnosRepository = contadorTurnosRepository;
         this.historialTurnosRepository = historialTurnosRepository;
         this.operacionRepository = operacionRepository;
-        this.sink = Sinks.many().replay().all();
+        this.sink = Sinks.many().replay().limit(100);
     }
 
     @Override
@@ -86,6 +86,8 @@ public class TurnoService implements ITurnoService {
 
                                         // 🔥 Emitir turno eliminado para los clientes
                                         TurnoDTO eliminado = new TurnoDTO();
+                                        eliminado.setHospitalId(turnoDTO.getHospitalId());
+                                        eliminado.setDepartamentoId(turnoDTO.getHospitalId());
                                         eliminado.setId(turnoId);
                                         eliminado.setEstado("eliminado");
                                         sink.tryEmitNext(eliminado);

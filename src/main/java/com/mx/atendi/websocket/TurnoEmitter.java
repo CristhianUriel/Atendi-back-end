@@ -7,7 +7,7 @@ import com.mx.atendi.dto.TurnoDTO;
 
 @Component
 public class TurnoEmitter {
-	private final Sinks.Many<TurnoDTO> sink = Sinks.many().multicast().onBackpressureBuffer();
+	private final Sinks.Many<TurnoDTO> sink = Sinks.many().replay().limit(100);
 
 	public void emitirTurno(TurnoDTO turno) {
 		sink.tryEmitNext(turno);
