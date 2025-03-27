@@ -70,8 +70,8 @@ public class TurnoWebSocketHandler implements WebSocketHandler {
                              usuarioId, hospitalId, departamentoId, esMonitor);
 
                     Flux<TurnoDTO> turnosStream = turnoService.streamTurnos(hospitalId, esMonitor ? null : departamentoId, esMonitor)
-                        .doOnNext(turno -> log.info("📤 Enviando turno: {}", turno))
-                        .delayElements(Duration.ofSeconds(1)); // Asegurar que el flujo no se complete de inmediato
+                        .doOnNext(turno -> log.info("📤 Enviando turno: {}", turno));
+                        //.delayElements(Duration.ofSeconds(1)); // Asegurar que el flujo no se complete de inmediato
 
                     sessionMap.put(usuarioId, session);
 

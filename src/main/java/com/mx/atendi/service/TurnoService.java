@@ -84,7 +84,7 @@ public class TurnoService implements ITurnoService {
                                     .map(operacion -> {
                                     	TurnoDTO turnoDTO = convertirADTO(savedTurno, operacion.getNombre());
                                         sink.tryEmitNext(turnoDTO); // 🔥 Emitir para actualizar WebSocket
-
+                                        
                                         // 🔥 Emitir turno eliminado para los clientes
                                         TurnoDTO eliminado = new TurnoDTO();
                                         eliminado.setHospitalId(turnoDTO.getHospitalId());
@@ -92,8 +92,9 @@ public class TurnoService implements ITurnoService {
                                         eliminado.setId(turnoId);
                                         eliminado.setEstado("eliminado");
                                         sink.tryEmitNext(eliminado);
-
+                                        log.info("Turno eliminado y emitido: {}", eliminado);
                                         log.info("✅ Turno tomado por usuario {}: {}", usuarioId, turnoDTO);
+                                        
                                         return turnoDTO;
                                     }));
                 });
@@ -124,10 +125,10 @@ public class TurnoService implements ITurnoService {
         );
 
         Flux<TurnoDTO> turnosNuevos = sink.asFlux()
-                .filter(turno -> Objects.equals(turno.getHospitalId(), hospitalId) && turno.getEstado().equals("pendiente")
+                .filter(turno -> Objects.equals(turno.getHospitalId(), hospitalId) 
                         && (esMonitor || turno.getDepartamentoId().equals(departamentoId)));
 
-        return Flux.merge(turnosPendientes, turnosNuevos).filter(turno -> turno.getEstado().equals("pendiente")).distinct(TurnoDTO::getId);
+        return Flux.merge(turnosPendientes, turnosNuevos).filter(turno -> turno.getEstado().equals("pendiente") || turno.getEstado().equals("eliminado"));
     }
 
 
