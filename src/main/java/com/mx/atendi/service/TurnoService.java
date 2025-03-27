@@ -3,6 +3,7 @@ package com.mx.atendi.service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -121,7 +122,7 @@ public class TurnoService implements ITurnoService {
         );
 
         Flux<TurnoDTO> turnosNuevos = sink.asFlux()
-                .filter(turno -> turno.getHospitalId().equals(hospitalId) && turno.getEstado().equals("pendiente")
+                .filter(turno -> Objects.equals(turno.getHospitalId(), hospitalId) && turno.getEstado().equals("pendiente")
                         && (esMonitor || turno.getDepartamentoId().equals(departamentoId)));
 
         return Flux.merge(turnosPendientes, turnosNuevos).filter(turno -> turno.getEstado().equals("pendiente")).distinct(TurnoDTO::getId);
