@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -138,8 +139,10 @@ public class VideoController {
 	// 🔹 LISTAR NOMBRES DE LOS VIDEOS
 	@GetMapping("/names")
 	@Operation(summary = "Obtener nombres de videos", description = "Devuelve una lista de los nombres de los videos almacenados")
-	public Flux<String> getVideoNames() {
-		return videoRepository.findAll().map(Video::getNombre);
+	public Mono<List<String>> getVideoNames() {
+	    return videoRepository.findAll()
+                .map(Video::getNombre)
+                .collectList();
 	}
 
 	// 🔹 ELIMINAR VIDEO
