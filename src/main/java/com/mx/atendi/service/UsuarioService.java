@@ -109,6 +109,35 @@ public class UsuarioService implements IUsuarioService {
 	            .flatMap(usuario -> usuarioRepository.delete(usuario))
 	            .doOnSuccess(v -> log.info("Usuario eliminado: {}", userId));
 	}
+	/**
+     * Actualiza completamente un usuario. Solo un administrador puede hacer esto.
+     *
+     * @param userId ID del usuario.
+     * @param usuario Datos del usuario a actualizar.
+     * @param rolAdmin Rol del usuario que realiza la operación.
+     * @return Mono con el usuario actualizado.
+     */
+    @Override
+	public Mono<Usuario> actualizarUsuario(String userId, Usuario usuario, String rolAdmin) {
+     
+
+        // Buscar el usuario en la base de datos
+        return usuarioRepository.findById(userId)
+                .switchIfEmpty(Mono.error(new RuntimeException("Usuario no encontrado")))
+                .flatMap(existingUsuario -> {
+                    // Actualizar los campos del usuario
+                    existingUsuario.setNombre(usuario.getNombre());
+                    existingUsuario.setRol(usuario.getRol());
+                    existingUsuario.setUserName(usuario.getUserName());
+                    existingUsuario.setDepartamentoId(usuario.getDepartamentoId());
+                    existingUsuario.setNumeroVentanilla(usuario.getNumeroVentanilla());
+                    existingUsuario.setPassword(usuario.getPassword());
+                    
+
+                    // Guardar y devolver el usuario actualizado
+                    return usuarioRepository.save(existingUsuario);
+                });
+    }
 
 }
 

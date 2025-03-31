@@ -110,6 +110,24 @@ public class UsuarioController {
         String rolAdmin = authentication.getAuthorities().iterator().next().getAuthority();
         return usuarioService.eliminarUsuarioPorId(userId, rolAdmin);
     }
+    /**
+     * Actualiza completamente un usuario. Solo administradores pueden hacer esto.
+     *
+     * @param userId ID del usuario.
+     * @param usuario Datos del usuario a actualizar.
+     * @param authentication Datos del usuario autenticado.
+     * @return Mono con el usuario actualizado.
+     */
+    @Operation(summary = "Actualizar usuario", description = "Actualiza todos los datos de un usuario")
+    @PutMapping("/{userId}")
+    public Mono<Usuario> actualizarUsuario(
+            @Parameter(description = "ID del usuario", required = true) @PathVariable String userId,
+            @RequestBody Mono<Usuario> usuarioMono,
+            Authentication authentication
+    ) {
+        String rolAdmin = authentication.getAuthorities().iterator().next().getAuthority();
+        return usuarioMono.flatMap(usuario -> usuarioService.actualizarUsuario(userId, usuario, rolAdmin));
+    }
 
 }
 

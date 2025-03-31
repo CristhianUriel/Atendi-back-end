@@ -170,7 +170,7 @@ public class ImpresionService implements IImpresionService {
 	// 🔥 Detecta si es una impresora térmica
 	private boolean esImpresoraTermica(String impresora) {
 		return impresora != null
-				&& (impresora.toLowerCase().contains("thermal") || impresora.toLowerCase().contains("escpos")|| impresora.toLowerCase().contains("80mm"));
+				&& (impresora.toLowerCase().contains("thermal") || impresora.toLowerCase().contains("escpos"));
 	}
 
 	// 🔥 Formato del ticket según el tipo de impresora

@@ -37,5 +37,6 @@ public interface IUsuarioService {
 	 */
 	Mono<Usuario> asignarDepartamentoYVentanilla(String userId, String departamentoId, String numeroVentanilla,
 			String rolAdmin);
+	Mono<Usuario> actualizarUsuario(String userId,  Usuario usuario, String rolAdmin );
 }
 
