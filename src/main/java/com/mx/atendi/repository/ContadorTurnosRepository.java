@@ -8,4 +8,5 @@ import java.time.LocalDate;
 @Repository
 public interface ContadorTurnosRepository extends ReactiveMongoRepository<ContadorTurnos, String> {
     Mono<ContadorTurnos> findByHospitalIdAndDepartamentoIdAndFecha(String hospitalId, String departamentoId, LocalDate fecha);
+    Mono<ContadorTurnos> findByHospitalIdAndFecha(String hospitalId, LocalDate fecha);
 }

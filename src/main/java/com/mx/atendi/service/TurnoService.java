@@ -217,7 +217,7 @@ public class TurnoService implements ITurnoService {
 	private Mono<String> generarNumeroTurno(String hospitalId, String departamentoId) {
 		LocalDate hoy = LocalDate.now();
 
-		return contadorTurnosRepository.findByHospitalIdAndDepartamentoIdAndFecha(hospitalId, departamentoId, hoy)
+		return contadorTurnosRepository.findByHospitalIdAndFecha(hospitalId, hoy)
 				.switchIfEmpty(Mono.defer(() -> {
 					ContadorTurnos nuevoContador = new ContadorTurnos();
 					nuevoContador.setHospitalId(hospitalId);
